@@ -1,0 +1,94 @@
+use id3::frame::Content;
+use id3::{Tag, Version};
+use std::collections::HashMap;
+// use mp3_metadata;
+use std::path::Path;
+use std::fs;
+use crate::metadata::album::Album;
+use crate::metadata::artist::Artist;
+use crate::metadata::song::Song;
+
+pub struct Library {
+    artistMap: HashMap<&'static str, Artist>,
+    albumMap: HashMap<&'static str, Album>,
+    songMap: HashMap<&'static str, Song>,
+}
+
+impl Library {
+    pub fn new() -> Library {
+        Library {
+            artistMap: HashMap::new(),
+            albumMap: HashMap::new(),
+            songMap: HashMap::new(),
+        }
+    }
+
+    pub fn import_file(self, filepath: String) -> Result<(), Box<dyn std::error::Error>> {
+        let mut song_title = "";
+        let mut artist_name = "";
+        let mut album_name = "";
+        let mut duration : u32;
+        let mut track_number = "";
+        let mut path = "";
+
+        let file_exists = Path::new(&filepath).exists();
+        if file_exists {
+            let result = fs::canonicalize(&filepath);
+        } else {
+            // return Result::Err("hi");
+        }
+
+        let tag = Tag::read_from_path(&filepath);
+        if let Ok(tag) = tag {
+            let title = tag.title();
+            match title {
+                Some(title) => {
+                    song_title = title;
+                }
+                None => {}
+            }
+            let artist = tag.artist();
+            match artist {
+                Some(artist) => {
+                    artist_name = artist;
+                }
+                None => {}
+            } 
+        } else {
+            let metadata = mp3_metadata::read_from_file(&filepath);
+            if let Ok(metadata) = metadata {
+                // let sec = metadata.duration.as_secs();
+                // println!("{}:{}", sec/60, sec % 60);
+                let tag = metadata.tag;
+                match tag {
+                    Some(tag) => {
+                        artist_name = tag.artist.as_str();
+                    }
+                    None => {}
+                }
+                let opt = metadata.optional_info;
+                for o in opt {
+                    let title = o.title;
+                    match title {
+                        Some(title) => {
+                            song_title = title.as_str();
+                        }
+                        None => {}
+                    }
+                    let lang = o.track_number;
+                    match lang {
+                        S=ome(lang) => {
+                            println!("{}", lang);
+                        }
+                        None => {}
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn import_dir(dirpath: &'static str) {}
+
+    pub fn save_to_file() {}
+}
