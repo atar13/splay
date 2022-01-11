@@ -13,25 +13,9 @@ fn main() {
     let tagged_file = read_from_path(filename, false).unwrap();
     let id3v2 = tagged_file.primary_tag().unwrap();
     // println!("{}", id3v2.get_string(&ItemKey::TrackTitle).unwrap());
+    lib.import_file(filename);
 
-    lib.import_dir(filename);
-    // match lib.import_file(filename) {
-    //     Ok(data) => data,
-    //     Err(error) => {
-    //         println!("{:?}", error);
-    //         return;
-    //     }
-    // };
-
-    // match lib.artistMap.get(&"Daft Punk".to_owned()) {
-    //     Some(artist) => {
-    //         println!("{}", artist.lock().unwrap().name)
-    //     },
-    //     _ => {
-    //         println!("no artist")
-    //     }
+    // for artist in lib.artistMap.iter() {
+    //     println!("{}", artist.1.lock().unwrap().name);
     // }
-    for artist in lib.artistMap.iter() {
-        println!("{}", artist.1.lock().unwrap().name);
-    }
 }

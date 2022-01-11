@@ -1,8 +1,4 @@
-// pub mod library;
-// use crate::metadata::album::Album;
-// use crate::metadata::artist::Artist;
-use audiotags::traits::AudioTag;
-use audiotags::Tag;
+use lofty::{read_from_path, Probe, Tag, ItemKey};
 use std::collections::HashMap;
 use std::fmt;
 use std::fs;
@@ -122,62 +118,27 @@ impl Library {
         } else {
             return Err(ImportError::FileNotFound);
         }
-        let tag: Box<dyn AudioTag>;
-        match Tag::new().read_from_path(filepath) {
-            Ok(new_tag) => {
-                tag = new_tag;
-            }
-            Err(error) => {
-                println!("{}", error);
+
+        match read_from_path(filepath, false) {
+            Ok(file) => {
+                match file.primary_tag() {
+                    Some(tag) =>  {
+                        title = tag.get_string(&ItemKey::TrackTitle).unwrap().to_string();
+                        println!("{}", tag.get_string(&ItemKey::Lyrics).unwrap())
+                    },
+                    _ =>  {
+                        return Err(ImportError::Parsing);
+                    }
+                }
+            },
+            Err(e) => {
                 return Err(ImportError::Parsing);
             }
         }
 
-        match tag.title() {
-            Some(new_title) => {
-                title = new_title.to_string();
-            }
-            None => return Err(ImportError::MissingData),
-        };
-        match tag.artist() {
-            Some(artist) => {
-                artist_name = artist.to_string();
-            }
-            None => {
-                artist_name = UNKNOWN_ARTIST.to_string();
-            }
-        };
-        match tag.album() {
-            Some(album) => {
-                album_title = album.title.to_string();
-                match album.artist {
-                    Some(tmp) => {
-                        album_artist = tmp.to_string();
-                    }
-                    None => {
-                        album_artist = UNKNOWN_ARTIST.to_string();
-                    }
-                };
-            }
-            None => {
-                album_title = UNKNOWN_ALBUM.to_string();
-                album_artist = UNKNOWN_ARTIST.to_string();
-            }
-        };
-        match tag.year() {
-            Some(tmp) => {
-                year = tmp;
-            }
-            None => year = 0,
-        };
-        match tag.track_number() {
-            Some(track_num) => track_num,
-            None => 0,
-        };
-        match tag.total_tracks() {
-            Some(total_track_num) => total_track_num,
-            None => 0,
-        };
+
+
+
 
         // // let fetched_artist =
         // self.artistMap.get(&artist_name)
@@ -189,88 +150,89 @@ impl Library {
         //     });
         // make new song
 
+        //commented after adding lofty code
 
-        match self.artistMap.get(&artist_name) {
-            Some(artist) => {
-                match self.albumMap.get(&album_title) {
-                    Some(album) => {
-                        artist.lock().unwrap().albums.push(album.clone());
-                        let new_song = Song {
-                            title: title.to_owned(),
-                            album: Some(album.clone()),
-                            artist: Some(artist.clone()),
-                            play_count: 0,
-                            track_number: track_num,
-                            duration: 0,
-                            path: path
-                        };
-                        let new_song_arc = Arc::new(Mutex::new(new_song));
-                        album.lock().unwrap().songs.push(new_song_arc.clone());
-                        self.songMap.insert(title.to_owned(), new_song_arc);
-                    },
-                    _ => {
-                        let new_song = Song {
-                            title: title.to_owned(),
-                            album: None,
-                            artist: Some(artist.clone()),
-                            play_count: 0,
-                            track_number: track_num,
-                            duration: 0,
-                            path: path
-                        };
-                        let new_song_arc = Arc::new(Mutex::new(new_song));
-                        let new_album: Album = Album {
-                            title: album_title.to_string(),
-                            songs: vec![new_song_arc.clone()],
-                            artist: Some(artist.clone()),
-                            year,
-                            genre: String::from(""),
-                            play_count: 0,
-                        };
-                        let new_album_arc = Arc::new(Mutex::new(new_album));
-                        new_song_arc.lock().unwrap().album = Some(new_album_arc.clone());
-                        self.albumMap.insert(album_title.to_string(), new_album_arc);
-                        self.songMap.insert(title.to_owned(), new_song_arc);
-                    }
-                }
-            }
-            None => {
-                let new_song = Song {
-                    title: title.to_owned(),
-                    album: None,
-                    artist: None,
-                    play_count: 0,
-                    track_number: track_num,
-                    duration: 0,
-                    path: path
-                };
-                let new_song_arc = Arc::new(Mutex::new(new_song));
-                let new_album: Album = Album {
-                    title: album_title.to_string(),
-                    songs: vec![new_song_arc.clone()],
-                    artist: None,
-                    year,
-                    genre: String::from(""),
-                    play_count: 0,
-                };
-                let new_album_arc = Arc::new(Mutex::new(new_album));
-                let new_artist = Artist {
-                    name: artist_name.to_owned(),
-                    albums: Vec::new(),
-                    play_count: 0,
-                };
-                let new_artist_arc = Arc::new(Mutex::new(new_artist));
+//         match self.artistMap.get(&artist_name) {
+//             Some(artist) => {
+//                 match self.albumMap.get(&album_title) {
+//                     Some(album) => {
+//                         artist.lock().unwrap().albums.push(album.clone());
+//                         let new_song = Song {
+//                             title: title.to_owned(),
+//                             album: Some(album.clone()),
+//                             artist: Some(artist.clone()),
+//                             play_count: 0,
+//                             track_number: track_num,
+//                             duration: 0,
+//                             path: path
+//                         };
+//                         let new_song_arc = Arc::new(Mutex::new(new_song));
+//                         album.lock().unwrap().songs.push(new_song_arc.clone());
+//                         self.songMap.insert(title.to_owned(), new_song_arc);
+//                     },
+//                     _ => {
+//                         let new_song = Song {
+//                             title: title.to_owned(),
+//                             album: None,
+//                             artist: Some(artist.clone()),
+//                             play_count: 0,
+//                             track_number: track_num,
+//                             duration: 0,
+//                             path: path
+//                         };
+//                         let new_song_arc = Arc::new(Mutex::new(new_song));
+//                         let new_album: Album = Album {
+//                             title: album_title.to_string(),
+//                             songs: vec![new_song_arc.clone()],
+//                             artist: Some(artist.clone()),
+//                             year,
+//                             genre: String::from(""),
+//                             play_count: 0,
+//                         };
+//                         let new_album_arc = Arc::new(Mutex::new(new_album));
+//                         new_song_arc.lock().unwrap().album = Some(new_album_arc.clone());
+//                         self.albumMap.insert(album_title.to_string(), new_album_arc);
+//                         self.songMap.insert(title.to_owned(), new_song_arc);
+//                     }
+//                 }
+//             }
+//             None => {
+//                 let new_song = Song {
+//                     title: title.to_owned(),
+//                     album: None,
+//                     artist: None,
+//                     play_count: 0,
+//                     track_number: track_num,
+//                     duration: 0,
+//                     path: path
+//                 };
+//                 let new_song_arc = Arc::new(Mutex::new(new_song));
+//                 let new_album: Album = Album {
+//                     title: album_title.to_string(),
+//                     songs: vec![new_song_arc.clone()],
+//                     artist: None,
+//                     year,
+//                     genre: String::from(""),
+//                     play_count: 0,
+//                 };
+//                 let new_album_arc = Arc::new(Mutex::new(new_album));
+//                 let new_artist = Artist {
+//                     name: artist_name.to_owned(),
+//                     albums: Vec::new(),
+//                     play_count: 0,
+//                 };
+//                 let new_artist_arc = Arc::new(Mutex::new(new_artist));
 
-                new_song_arc.lock().unwrap().album = Some(new_album_arc.clone());
-                new_song_arc.lock().unwrap().artist = Some(new_artist_arc.clone());
+//                 new_song_arc.lock().unwrap().album = Some(new_album_arc.clone());
+//                 new_song_arc.lock().unwrap().artist = Some(new_artist_arc.clone());
 
-                new_album_arc.lock().unwrap().artist = Some(new_artist_arc.clone());
+//                 new_album_arc.lock().unwrap().artist = Some(new_artist_arc.clone());
 
-                self.artistMap.insert(artist_name.to_owned(), new_artist_arc);
-                self.albumMap.insert(album_title.to_owned(), new_album_arc);
-                self.songMap.insert(title.to_owned(), new_song_arc);
-            }
-        }
+//                 self.artistMap.insert(artist_name.to_owned(), new_artist_arc);
+//                 self.albumMap.insert(album_title.to_owned(), new_album_arc);
+//                 self.songMap.insert(title.to_owned(), new_song_arc);
+//             }
+//         }
 
         Ok(())
     }
