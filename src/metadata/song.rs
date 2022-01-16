@@ -1,4 +1,3 @@
-
 // pub struct Song {
 //     title: String,
 //     artist_name: String,
@@ -28,7 +27,6 @@
 //             path,
 //         }
 //     }
-
 
 //     pub fn get_title(&self) -> &String {
 //         return &self.title;

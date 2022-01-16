@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 lofty = "0.3.3"
+multimap = "0.8.3"

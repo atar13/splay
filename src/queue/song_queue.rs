@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 
 pub struct SongQueue {
     immediate_queue: VecDeque<Song>,
-    upcoming_queue: VecDeque<Song>
+    upcoming_queue: VecDeque<Song>,
 }
 
 impl SongQueue {
