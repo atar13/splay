@@ -5,10 +5,10 @@ use std::error::Error;
 use std::fmt;
 use std::fs;
 // use std::fs::File;
+use bincode;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use serde::{Serialize, Deserialize};
-use bincode;
 use std::time::Instant;
 // use std::io::BufReader;
 
@@ -40,15 +40,13 @@ pub struct Song {
     pub duration: String,
     pub play_count: u32,
     pub track_number: Option<String>,
-    pub path: String
+    pub path: String,
 }
-
-
 
 pub struct Library {
     pub artist_map: HashMap<String, Artist>,
     pub album_map: MultiMap<String, Album>,
-    pub song_map: MultiMap<String, Song>, 
+    pub song_map: MultiMap<String, Song>,
 }
 
 pub enum ImportError {
@@ -92,7 +90,6 @@ impl fmt::Debug for ImportError {
     }
 }
 
-
 impl Library {
     pub fn new() -> Library {
         Library {
@@ -103,7 +100,7 @@ impl Library {
     }
 
     // only support wav, mp3, flac
-    fn import_file(&mut self, filepath: &str) -> Result<(), Box<dyn Error>> {
+    pub fn import_file(&mut self, filepath: &str) -> Result<(), Box<dyn Error>> {
         let path;
         if Path::new(filepath).exists() {
             path = fs::canonicalize(filepath);
@@ -192,7 +189,11 @@ impl Library {
                         // let new_album_arc = Arc::new(Mutex::new(new_album));
                         match path {
                             Ok(tmp) => {
-                                let duration_str = format!("{}:{}", duration.as_secs() / 60, duration.as_secs() % 60);
+                                let duration_str = format!(
+                                    "{}:{}",
+                                    duration.as_secs() / 60,
+                                    duration.as_secs() % 60
+                                );
                                 let new_song = Song {
                                     title: title.to_string(),
                                     album_title: album_title.to_string(),
@@ -214,7 +215,7 @@ impl Library {
                                                 album.song_titles.push(title.to_string());
                                             }
                                         }
-                                    }, 
+                                    }
                                     None => {
                                         let new_album = Album {
                                             title: album_title.to_string(),
@@ -228,14 +229,15 @@ impl Library {
                                 match self.artist_map.get_mut(album_artist) {
                                     Some(artist) => {
                                         artist.album_titles.push(album_title.to_string());
-                                    },
+                                    }
                                     None => {
                                         let new_artist = Artist {
                                             name: album_artist.to_string(),
                                             album_titles: vec![album_title.to_string()],
                                             play_count: 0,
                                         };
-                                        self.artist_map.insert(album_artist.to_string(), new_artist);
+                                        self.artist_map
+                                            .insert(album_artist.to_string(), new_artist);
                                     }
                                 }
                             }
@@ -263,10 +265,15 @@ impl Library {
         let now = Instant::now();
         match self._import_dir(dir_path) {
             Err(e) => return Err(e),
-            _ => ()
+            _ => (),
         }
         let elapsed = now.elapsed();
-        info!("Took {:.3?} to import {} files from {}", elapsed, self.song_map.len(), dir_path);
+        info!(
+            "Took {:.3?} to import {} files from {}",
+            elapsed,
+            self.song_map.len(),
+            dir_path
+        );
         Ok(())
     }
 
@@ -279,7 +286,7 @@ impl Library {
                         if file.path().is_dir() {
                             match self._import_dir(file.path().to_str().unwrap()) {
                                 Err(e) => error!("{:?}", e),
-                                _ => ()
+                                _ => (),
                             }
                         } else {
                             let _ = self.import_file(file.path().to_str().unwrap());
@@ -294,7 +301,6 @@ impl Library {
         return Ok(());
     }
 
-
     pub fn save_to_csv(&self) -> Result<(), Box<dyn Error>> {
         let db_file = fs::File::create("db.csv")?;
         let mut wtr = csv::Writer::from_writer(db_file);
@@ -304,12 +310,12 @@ impl Library {
         for (_, song) in self.song_map.iter() {
             match wtr.serialize(song) {
                 Ok(_) => (),
-                Err(e) => error!("{:?}", e)
+                Err(e) => error!("{:?}", e),
             }
         }
         match wtr.flush() {
             Ok(_) => (),
-            Err(e) => error!("{:?}", e)
+            Err(e) => error!("{:?}", e),
         }
         Ok(())
     }
@@ -326,16 +332,17 @@ impl Library {
         let db_file;
         match std::fs::File::open("db") {
             Ok(f) => db_file = f,
-            Err(e) => { return Err(Box::new(e))}
+            Err(e) => return Err(Box::new(e)),
         };
         let mut buf_reader = std::io::BufReader::new(db_file);
         loop {
-            let result : Result<Song, Box<bincode::ErrorKind>> = bincode::deserialize_from(&mut buf_reader);
+            let result: Result<Song, Box<bincode::ErrorKind>> =
+                bincode::deserialize_from(&mut buf_reader);
             match result {
                 Ok(song) => {
                     // println!("{}", song.title);
                     self.song_map.insert(song.title.to_string(), song);
-                },
+                }
                 Err(e) => {
                     error!("{:?}", e);
                     break;
@@ -349,7 +356,7 @@ impl Library {
         let db_file = fs::File::open("db.csv")?;
         let mut reader = csv::Reader::from_reader(db_file);
         for result in reader.deserialize() {
-            let song : Song = result?;
+            let song: Song = result?;
             match self.album_map.get_vec_mut(song.album_title.as_str()) {
                 Some(albums) => {
                     for album in albums {
@@ -358,13 +365,13 @@ impl Library {
                             album.song_titles.push(song.title.to_string());
                         }
                     }
-                }, 
+                }
                 None => {
                     let album = Album {
                         title: song.album_title.to_string(),
                         artist_name: song.album_artist.to_string(),
                         play_count: song.play_count,
-                        song_titles: vec![song.title.to_string()]
+                        song_titles: vec![song.title.to_string()],
                     };
                     self.album_map.insert(album.title.to_string(), album);
                 }
@@ -373,7 +380,7 @@ impl Library {
                 Some(artist) => {
                     artist.play_count += song.play_count;
                     artist.album_titles.push(song.album_title.to_string());
-                }, 
+                }
                 None => {
                     let artist = Artist {
                         name: song.album_artist.to_string(),
