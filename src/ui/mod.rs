@@ -3,9 +3,10 @@ use crate::utils::constants::Requests::UIRequests;
 use std::{io, sync::mpsc::Receiver};
 
 use crossterm::{
+    cursor,
     event::DisableMouseCapture,
-    execute,
-    terminal::{enable_raw_mode, LeaveAlternateScreen},
+    execute, queue, style,
+    terminal::{self, disable_raw_mode, enable_raw_mode, LeaveAlternateScreen},
 };
 use tui::{
     backend::CrosstermBackend,
@@ -73,11 +74,13 @@ impl UI {
 
     fn cleanup(&mut self) {
         execute!(
-            self.term.backend_mut(),
-            LeaveAlternateScreen,
-            DisableMouseCapture
+            io::stdout(),
+            style::ResetColor,
+            cursor::Show,
+            terminal::LeaveAlternateScreen
         )
         .unwrap();
-        self.term.show_cursor().unwrap();
+
+        disable_raw_mode().unwrap();
     }
 }
