@@ -431,7 +431,9 @@ impl Player for SymphoniaPlayer {
         //     Some(track) => track,
         //     _ => return (),
         // };
-        let mut decoder = symphonia::default::get_codecs().make(&track.codec_params, &dec_opts).unwrap();
+        let mut decoder = symphonia::default::get_codecs()
+            .make(&track.codec_params, &dec_opts)
+            .unwrap();
         // let tb = track.codec_params.time_base;
         // let dur = track.codec_params.n_frames.map(|frames| track.codec_params.start_ts + frames);
         // // let result = loop {

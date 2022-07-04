@@ -3,6 +3,7 @@ mod metadata;
 mod player;
 mod queue;
 mod utils;
+use crate::library::search::SearchDB;
 use crate::library::Library;
 use crate::player::rodio_player::RodioPlayer;
 use crate::player::symphonia_player::SymphoniaPlayer;
@@ -60,12 +61,12 @@ fn main() {
     match lib.song_map.get_vec_mut(filename) {
         Some(songs) => {
             player.start(songs[0].clone());
-            // let result = tx.send(PlayerRequests::START(songs[0].clone()));
-            // match result {
-            //     Ok(_) => (),
-            //     Err(e) => error!("{:?}", e)
-            // }
-            // thread::sleep(std::time::Duration::from_secs(2));
+            let result = tx.send(PlayerRequests::START(songs[0].clone()));
+            match result {
+                Ok(_) => (),
+                Err(e) => error!("{:?}", e)
+            }
+            thread::sleep(std::time::Duration::from_secs(2));
             // let result = tx.send(PlayerRequests::STOP);
             // match result {
             //     Ok(_) => (),
