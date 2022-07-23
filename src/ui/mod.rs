@@ -5,7 +5,7 @@ use crate::utils::constants::Requests::UIRequests;
 use crate::utils::constants::Requests::UIRequests::*;
 use std::{
     fmt::format,
-    io,
+    io::{self, Stdout},
     sync::mpsc::Receiver,
     time::{Duration, Instant},
 };
@@ -19,24 +19,17 @@ use crossterm::{
     terminal::{self, disable_raw_mode, enable_raw_mode},
 };
 use tui::{
-    backend::CrosstermBackend,
+    backend::{Backend, CrosstermBackend},
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Span, Spans, Text},
     widgets::{Block, Borders, List, ListItem, ListState},
-    Terminal,
+    Frame, Terminal,
 };
 
-struct UIState<'a> {
-    songListState: StatefulList<&'a str>,
-}
-
-pub struct UI<'a> {
-    term: Box<Terminal<CrosstermBackend<io::Stdout>>>,
-    state: UIState<'a>,
-}
 pub fn start(rx: Receiver<UIRequests>) {
     info!("Starting up UI...");
+
     // initialize terminal state
     enable_raw_mode().unwrap();
     let mut stdout = io::stdout();
@@ -50,6 +43,64 @@ pub fn start(rx: Receiver<UIRequests>) {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend).unwrap();
 
+    debug!("Terminal started successfully");
+
+    let tick_rate = Duration::from_millis(250);
+    let ui = UI::new();
+    ui.run(&mut terminal, &tick_rate);
+
+    // restore terminal
+    debug!("Starting to cleanup terminal ...");
+    disable_raw_mode().unwrap();
+    execute!(
+        terminal.backend_mut(),
+        terminal::LeaveAlternateScreen,
+        event::DisableMouseCapture
+    )
+    .unwrap();
+    terminal.show_cursor().unwrap();
+    debug!("Terminal cleaned successfully");
+}
+
+pub struct UI {}
+
+impl UI {
+    pub fn new() -> UI {
+        UI {}
+    }
+
+    pub fn run(
+        self,
+        terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+        tick_rate: &Duration,
+    ) -> () {
+        let mut last_tick = Instant::now();
+        let items: Vec<&str> = vec!["Item 1", "Item 2", "Item 3"];
+        let mut songListState = StatefulList::with_items(items);
+        songListState.next(); // select first element
+        loop {
+            terminal.draw(|f| get_stuff(f, &mut songListState)).unwrap();
+
+            let timeout = tick_rate
+                .checked_sub(last_tick.elapsed())
+                .unwrap_or_else(|| Duration::from_secs(0));
+            if crossterm::event::poll(timeout).unwrap() {
+                if let Event::Key(key) = event::read().unwrap() {
+                    match key.code {
+                        KeyCode::Char('q') => return,
+                        // KeyCode::Left => app.items.unselect(),
+                        KeyCode::Down => songListState.next(),
+                        KeyCode::Up => songListState.previous(),
+                        _ => {}
+                    }
+                }
+            }
+            if last_tick.elapsed() >= *tick_rate {
+                // app.on_tick();
+                last_tick = Instant::now();
+            }
+        }
+    }
     // 'main_ui: loop {
     //     match rx.recv() {
     //         #[warn(unreachable_patterns)]
@@ -75,153 +126,57 @@ pub fn start(rx: Receiver<UIRequests>) {
     //     }
     // }
 
-    let tick_rate = Duration::from_millis(250);
-    let mut last_tick = Instant::now();
-    'main: loop {
-        // terminal.draw(|f| ui(f, &mut app))?;
-
-        let timeout = tick_rate
-            .checked_sub(last_tick.elapsed())
-            .unwrap_or_else(|| Duration::from_secs(0));
-        if crossterm::event::poll(timeout).unwrap() {
-            if let Event::Key(key) = event::read().unwrap() {
-                match key.code {
-                    KeyCode::Char('q') => break 'main,
-                    // KeyCode::Left => app.items.unselect(),
-                    // KeyCode::Down => app.items.next(),
-                    // KeyCode::Up => app.items.previous(),
-                    _ => {}
-                }
-            }
-        }
-        if last_tick.elapsed() >= tick_rate {
-            // app.on_tick();
-            last_tick = Instant::now();
-        }
-    }
-
-    // restore terminal
-    disable_raw_mode().unwrap();
-    execute!(
-        terminal.backend_mut(),
-        terminal::LeaveAlternateScreen,
-        event::DisableMouseCapture
-    )
-    .unwrap();
-    terminal.show_cursor().unwrap();
-
-    // //  draw borders
-    // self.term
-    //     .draw(|frame| {
-    //         let size = frame.size();
-    //         let block = Block::default().title("tarvrs").borders(Borders::ALL);
-    //         frame.render_widget(block, size);
-    //     })
-    //     .unwrap();
-
-    // self.term
-    //     .draw(|frame| {
-    //         let chunks = Layout::default()
-    //             .direction(Direction::Vertical)
-    //             .margin(1)
-    //             .constraints(
-    //                 [
-    //                     Constraint::Percentage(10),
-    //                     Constraint::Percentage(80),
-    //                     Constraint::Percentage(10),
-    //                 ]
-    //                 .as_ref(),
-    //             )
-    //             .split(frame.size());
-    //         let block = Block::default().title("Block").borders(Borders::ALL);
-    //         frame.render_widget(block, chunks[0]);
-    //         // let block = Block::default().title("Block 2").borders(Borders::ALL);
-    //         // frame.render_widget(block, chunks[1]);
-    //         let block = Block::default().title("Block 3").borders(Borders::ALL);
-    //         frame.render_widget(block, chunks[2]);
-
-    //         let items: Vec<&'a str> = vec!["Item 1", "Item 2", "Item 3"];
-    //         self.state.songListState = StatefulList::with_items(items);
-    //         // self.state.songListState.state.select(Some(2));
-    //         let list: Vec<ListItem> = self
-    //             .state
-    //             .songListState
-    //             .items
-    //             .iter()
-    //             .map(|i| ListItem::new(vec![Spans::from(Span::raw(*i))]))
-    //             .collect();
-    //         let list = List::new(list)
-    //             .block(Block::default().borders(Borders::ALL).title("Songs"))
-    //             .highlight_style(Style::default().add_modifier(Modifier::BOLD))
-    //             .highlight_symbol(">> ");
-
-    //         self.state.songListState.next();
-    //         self.state.songListState.next();
-    //         frame.render_stateful_widget(list, chunks[1], &mut self.state.songListState.state);
-    //         self.state.songListState.next();
-    //     })
-    //     .unwrap();
-}
-
-impl<'a> UI<'a> {
-    // pub fn new() -> UI<'a> {
-    //     UI {
-    //         // term: Terminal::new(backend).unwrap(),
-    //         term: Box::new(terminal),
-    //         state: UIState {
-    //             songListState: StatefulList::with_items(Vec::new()),
-    //         },
+    // fn on_up(&mut self) {
+    //     match self.state.songListState.state.selected() {
+    //         None => info!("could not get selected item"),
+    //         Some(idx) => info!("{}", idx),
     //     }
+    //     self.state.songListState.previous()
     // }
 
-    fn clear(&mut self) {
-        match self.term.clear() {
-            Err(err) => {
-                error!(
-                    "Could not clear terminal screen. \n \t Reason: {}",
-                    err.to_string()
-                )
-            }
-            _ => {}
-        }
-    }
+    // fn on_down(&mut self) {
+    //     match self.state.songListState.state.selected() {
+    //         None => info!("could not get selected item"),
+    //         Some(idx) => info!("{}", idx),
+    //     }
+    //     self.state.songListState.next();
+    // }
+}
 
-    fn cleanup(&mut self) {
-        // restore terminal
-        disable_raw_mode().unwrap();
-        execute!(
-            self.term.backend_mut(),
-            terminal::LeaveAlternateScreen,
-            event::DisableMouseCapture
+fn get_stuff<B: Backend>(frame: &mut Frame<B>, songListState: &mut StatefulList<&str>) {
+    let size = frame.size();
+    let block = Block::default().title("tarvrs").borders(Borders::ALL);
+    // frame.render_widget(block, size);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .margin(1)
+        .constraints(
+            [
+                Constraint::Percentage(10),
+                Constraint::Percentage(80),
+                Constraint::Percentage(10),
+            ]
+            .as_ref(),
         )
-        .unwrap();
-        self.term.show_cursor().unwrap();
-        // execute!(
-        //     io::stdout(),
-        //     style::ResetColor,
-        //     cursor::Show,
-        //     terminal::LeaveAlternateScreen,
-        // )
-        // .unwrap();
+        .split(frame.size());
 
-        // disable_raw_mode().unwrap();
-    }
+    let block = Block::default().title("Block").borders(Borders::ALL);
+    frame.render_widget(block, chunks[0]);
 
-    fn on_up(&mut self) {
-        match self.state.songListState.state.selected() {
-            None => info!("could not get selected item"),
-            Some(idx) => info!("{}", idx),
-        }
-        self.state.songListState.previous()
-    }
+    let block = Block::default().title("Block 3").borders(Borders::ALL);
+    frame.render_widget(block, chunks[2]);
 
-    fn on_down(&mut self) {
-        match self.state.songListState.state.selected() {
-            None => info!("could not get selected item"),
-            Some(idx) => info!("{}", idx),
-        }
-        self.state.songListState.next();
-    }
+    let list: Vec<ListItem> = songListState
+        .items
+        .iter()
+        .map(|i| ListItem::new(vec![Spans::from(Span::raw(*i))]))
+        .collect();
 
-    fn refresh(&mut self) {}
+    let list = List::new(list)
+        .block(Block::default().borders(Borders::ALL).title("Songs"))
+        .highlight_style(Style::default().add_modifier(Modifier::BOLD))
+        .highlight_symbol(">> ");
+
+    frame.render_stateful_widget(list, chunks[1], &mut songListState.state);
 }
