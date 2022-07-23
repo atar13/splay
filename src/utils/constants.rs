@@ -1,5 +1,7 @@
 pub mod Requests {
     pub enum UIRequests {
+        Up,
+        Down,
         Cleanup,
         CleanupAndQuit,
     }

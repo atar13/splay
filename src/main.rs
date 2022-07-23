@@ -15,6 +15,7 @@ use crate::ui::UI;
 use crate::utils::constants::Requests::*;
 use core::time;
 use std::env;
+use std::process::exit;
 
 #[macro_use]
 extern crate log;
@@ -40,8 +41,9 @@ fn main() {
     let (app_tx, app_rx): (Sender<AppRequests>, Receiver<AppRequests>) = mpsc::channel();
     let (ui_tx, ui_rx): (Sender<UIRequests>, Receiver<UIRequests>) = mpsc::channel();
 
-    let ui = UI::new();
-    children.push(thread::spawn(move || ui.start_ui(ui_rx)));
+    // children.push(thread::spawn(move || ui::start(ui_rx)));
+    ui::start(ui_rx);
+    exit(0);
     children.push(thread::spawn(move || listen_for_input(app_tx, ui_tx)));
     // ui.cleanup();
     loop {
@@ -57,7 +59,7 @@ fn main() {
                     for child in children {
                         let _ = child.join();
                     }
-                    std::process::exit(1);
+                    std::process::exit(0);
                 }
             },
         }

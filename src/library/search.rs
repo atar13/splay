@@ -1,12 +1,10 @@
 // TODO: make SearchDB a trait and have different variations that implement it (songs, artists, albums, playlists, genres ...)
 
-
-
 struct node {
     is_word: bool,
     left_child: Box<node>,
     middle_child: Box<node>,
-    right_child: Box<node>
+    right_child: Box<node>,
 }
 
 pub struct SearchDB {
