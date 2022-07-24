@@ -1,14 +1,17 @@
+pub mod helper;
 pub mod input;
 pub mod widgets;
 
-use crate::utils::constants::Requests::UIRequests;
+use crate::library::Song;
 use crate::utils::constants::Requests::UIRequests::*;
+use crate::{library::Library, utils::constants::Requests::UIRequests};
 use std::{
     fmt::format,
     io::{self, Stdout},
     sync::mpsc::Receiver,
     time::{Duration, Instant},
 };
+use tui::layout::Alignment;
 use widgets::stateful_list::StatefulList;
 
 use crossterm::{
@@ -23,11 +26,11 @@ use tui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Span, Spans, Text},
-    widgets::{Block, Borders, List, ListItem, ListState},
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
     Frame, Terminal,
 };
 
-pub fn start(rx: Receiver<UIRequests>) {
+pub fn start<'a>(rx: Receiver<UIRequests>, songs: Vec<Song>) {
     info!("Starting up UI...");
 
     // initialize terminal state
@@ -45,12 +48,13 @@ pub fn start(rx: Receiver<UIRequests>) {
 
     debug!("Terminal started successfully");
 
-    let tick_rate = Duration::from_millis(250);
-    let ui = UI::new();
-    ui.run(&mut terminal, &tick_rate);
+    let app = App::with_songs(songs);
+    app.run(&mut terminal, rx);
+
+    info!("stopping now");
 
     // restore terminal
-    debug!("Starting to cleanup terminal ...");
+    info!("Starting to cleanup terminal ...");
     disable_raw_mode().unwrap();
     execute!(
         terminal.backend_mut(),
@@ -59,124 +63,138 @@ pub fn start(rx: Receiver<UIRequests>) {
     )
     .unwrap();
     terminal.show_cursor().unwrap();
-    debug!("Terminal cleaned successfully");
+    info!("Terminal cleaned successfully");
 }
 
-pub struct UI {}
+struct State {
+    song_list: StatefulList<Song>,
+}
 
-impl UI {
-    pub fn new() -> UI {
-        UI {}
+pub struct App {
+    state: State,
+    tmp_show_popup: bool,
+}
+
+impl App {
+    pub fn new() -> App {
+        let state = State {
+            song_list: StatefulList::with_items(vec![]),
+        };
+        App {
+            state,
+            tmp_show_popup: false,
+        }
     }
 
-    pub fn run(
-        self,
-        terminal: &mut Terminal<CrosstermBackend<Stdout>>,
-        tick_rate: &Duration,
-    ) -> () {
-        let mut last_tick = Instant::now();
-        let items: Vec<&str> = vec!["Item 1", "Item 2", "Item 3"];
-        let mut songListState = StatefulList::with_items(items);
-        songListState.next(); // select first element
-        loop {
-            terminal.draw(|f| get_stuff(f, &mut songListState)).unwrap();
+    pub fn with_songs(songs: Vec<Song>) -> App {
+        let state = State {
+            song_list: StatefulList::with_items(songs),
+        };
+        App {
+            state,
+            tmp_show_popup: false,
+        }
+    }
 
-            let timeout = tick_rate
-                .checked_sub(last_tick.elapsed())
-                .unwrap_or_else(|| Duration::from_secs(0));
-            if crossterm::event::poll(timeout).unwrap() {
-                if let Event::Key(key) = event::read().unwrap() {
-                    match key.code {
-                        KeyCode::Char('q') => return,
-                        // KeyCode::Left => app.items.unselect(),
-                        KeyCode::Down => songListState.next(),
-                        KeyCode::Up => songListState.previous(),
-                        _ => {}
+    #[warn(unreachable_patterns)]
+    pub fn run(
+        mut self,
+        terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+        rx: Receiver<UIRequests>,
+    ) -> () {
+        self.state.song_list.next(); // select first element
+
+        loop {
+            terminal.draw(|f| self.get_ui(f)).unwrap();
+            match rx.recv() {
+                Ok(request) => match request {
+                    Up => self.on_up(),
+                    Down => self.on_down(),
+                    Enter => self.on_enter(),
+                    Quit => return,
+                    _ => {
+                        error!("This UI event is not implemented yet")
                     }
+                },
+                Err(err) => {
+                    error!(
+                        "Could not receive UI event. \n \t Reason: {}",
+                        err.to_string()
+                    )
                 }
-            }
-            if last_tick.elapsed() >= *tick_rate {
-                // app.on_tick();
-                last_tick = Instant::now();
             }
         }
     }
-    // 'main_ui: loop {
-    //     match rx.recv() {
-    //         #[warn(unreachable_patterns)]
-    //         Ok(request) => match request {
-    //             Up => self.on_up(),
-    //             Down => self.on_down(),
-    //             Cleanup => self.cleanup(),
-    //             CleanupAndQuit => {
-    //                 self.cleanup();
-    //                 // self.clear();
-    //                 break 'main_ui;
-    //             }
-    //             _ => {
-    //                 error!("This UI event is not implemented yet")
-    //             }
-    //         },
-    //         Err(err) => {
-    //             error!(
-    //                 "Could not receive UI event. \n \t Reason: {}",
-    //                 err.to_string()
-    //             )
-    //         }
-    //     }
-    // }
 
-    // fn on_up(&mut self) {
-    //     match self.state.songListState.state.selected() {
-    //         None => info!("could not get selected item"),
-    //         Some(idx) => info!("{}", idx),
-    //     }
-    //     self.state.songListState.previous()
-    // }
+    fn on_up(&mut self) {
+        self.state.song_list.previous()
+    }
 
-    // fn on_down(&mut self) {
-    //     match self.state.songListState.state.selected() {
-    //         None => info!("could not get selected item"),
-    //         Some(idx) => info!("{}", idx),
-    //     }
-    //     self.state.songListState.next();
-    // }
-}
+    fn on_down(&mut self) {
+        self.state.song_list.next();
+    }
 
-fn get_stuff<B: Backend>(frame: &mut Frame<B>, songListState: &mut StatefulList<&str>) {
-    let size = frame.size();
-    let block = Block::default().title("tarvrs").borders(Borders::ALL);
-    // frame.render_widget(block, size);
+    fn on_enter(&mut self) {
+        self.tmp_show_popup = !self.tmp_show_popup;
+    }
 
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .margin(1)
-        .constraints(
-            [
-                Constraint::Percentage(10),
-                Constraint::Percentage(80),
-                Constraint::Percentage(10),
-            ]
-            .as_ref(),
-        )
-        .split(frame.size());
+    fn get_ui<B: Backend>(&mut self, frame: &mut Frame<B>) {
+        let size = frame.size();
+        let block = Block::default().title("tarvrs").borders(Borders::ALL);
+        frame.render_widget(block, size);
 
-    let block = Block::default().title("Block").borders(Borders::ALL);
-    frame.render_widget(block, chunks[0]);
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .margin(1)
+            .constraints(
+                [
+                    Constraint::Percentage(10),
+                    Constraint::Percentage(80),
+                    Constraint::Percentage(10),
+                ]
+                .as_ref(),
+            )
+            .split(frame.size());
 
-    let block = Block::default().title("Block 3").borders(Borders::ALL);
-    frame.render_widget(block, chunks[2]);
+        let block = Block::default().title("Block").borders(Borders::ALL);
+        frame.render_widget(block, chunks[0]);
 
-    let list: Vec<ListItem> = songListState
-        .items
-        .iter()
-        .map(|i| ListItem::new(vec![Spans::from(Span::raw(*i))]))
-        .collect();
+        let block = Block::default().title("Block 3").borders(Borders::ALL);
+        frame.render_widget(block, chunks[2]);
 
-    let list = List::new(list)
-        .block(Block::default().borders(Borders::ALL).title("Songs"))
-        .highlight_style(Style::default().add_modifier(Modifier::BOLD))
-        .highlight_symbol(">> ");
+        let list: Vec<ListItem> = self
+            .state
+            .song_list
+            .items
+            .iter()
+            .map(|i| ListItem::new(vec![Spans::from(i.title.clone())]))
+            .collect();
 
-    frame.render_stateful_widget(list, chunks[1], &mut songListState.state);
+        let list = List::new(list)
+            .block(Block::default().borders(Borders::ALL).title("Songs"))
+            .highlight_style(
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )
+            .highlight_symbol(">> ");
+
+        frame.render_stateful_widget(list, chunks[1], &mut self.state.song_list.state);
+
+        if self.tmp_show_popup {
+            let block = Block::default().title("Popup").borders(Borders::ALL);
+            let area = helper::centered_rect(60, 60, size);
+            let selected_song = self
+                .state
+                .song_list
+                .items
+                .get(self.state.song_list.state.selected().unwrap());
+            let paragraph = Paragraph::new(format!("{:#?}", selected_song.unwrap()))
+                .style(Style::default().fg(Color::White))
+                .alignment(Alignment::Left);
+            frame.render_widget(Clear, area);
+            frame.render_widget(paragraph, block.inner(area));
+            frame.render_widget(block, area);
+        }
+    }
 }

@@ -10,8 +10,6 @@ use crate::library::Library;
 // use crate::player::rodio_player::RodioPlayer;
 // use crate::player::symphonia_player::SymphoniaPlayer;
 use crate::player::{Player, PlayerRequests};
-use crate::ui::input::listen_for_input;
-use crate::ui::UI;
 use crate::utils::constants::Requests::*;
 use core::time;
 use std::env;
@@ -35,19 +33,49 @@ fn main() {
     info!("Starting tarvrs...");
 
     // let args: Vec<String> = env::args().collect();
+    let mut lib = Library::new();
+    // let filename = &args[1];
+    // let result = lib.import_file(filename);
+    let result = lib.import_dir("/home/atarbinian/Desktop/sample"); // TODO: allow to use ~
+
+    // lib.save_to_csv();
+    match result {
+        Ok(_) => (),
+        Err(e) => error!("{}", e),
+    };
+    match lib.read_from_csv() {
+        Ok(_) => (),
+        Err(e) => error!("{:?}", e),
+    }
+    // error!("{}", filename);
+    // match lib.read_from_bin() {
+    //     Ok(_) => (),
+    //     Err(e) => error!("{:?}", e),
+    // }
 
     let mut children = vec![];
 
-    let (app_tx, app_rx): (Sender<AppRequests>, Receiver<AppRequests>) = mpsc::channel();
+    let (main_tx, main_rx): (Sender<AppRequests>, Receiver<AppRequests>) = mpsc::channel();
     let (ui_tx, ui_rx): (Sender<UIRequests>, Receiver<UIRequests>) = mpsc::channel();
 
-    // children.push(thread::spawn(move || ui::start(ui_rx)));
-    ui::start(ui_rx);
-    exit(0);
-    children.push(thread::spawn(move || listen_for_input(app_tx, ui_tx)));
-    // ui.cleanup();
+    let songs = match lib.artist_map.get("Daft Punk") {
+        Some(artist) => {
+            let mut songs = Vec::new();
+            for album in &artist.album_titles {
+                for song_title in &lib.album_map.get(album).unwrap().song_titles {
+                    songs.push(lib.song_map.get(song_title).unwrap().clone())
+                }
+            }
+            songs
+        }
+        None => Vec::new(),
+    };
+
+    children.push(thread::spawn(move || ui::start(ui_rx, songs)));
+    children.push(thread::spawn(move || ui::input::listen_for_input(main_tx)));
+
     loop {
-        match app_rx.recv() {
+        match main_rx.recv() {
             Err(err) => {
                 error!(
                     "Could not receive request to modify app state. Reason: {}",
@@ -56,33 +84,26 @@ fn main() {
             }
             Ok(request) => match request {
                 AppRequests::Quit => {
+                    let _ = ui_tx.send(UIRequests::Quit);
                     for child in children {
                         let _ = child.join();
                     }
+                    info!("Gracefully shutting down");
                     std::process::exit(0);
                 }
+                AppRequests::UIUp => {
+                    let _ = ui_tx.send(UIRequests::Up);
+                }
+                AppRequests::UIDown => {
+                    let _ = ui_tx.send(UIRequests::Down);
+                }
+                AppRequests::UIEnter => {
+                    let _ = ui_tx.send(UIRequests::Enter);
+                }
+                _ => (),
             },
         }
     }
-
-    // let mut lib = Library::new();
-    // let filename = &args[1];
-    // // let result = lib.import_file(filename);
-    // // let result = lib.import_dir(filename);
-    // // lib.save_to_csv();
-    // // match result {
-    // //     Ok(_) => (),
-    // //     Err(e) => println!("{}", e),
-    // // };
-    // match lib.read_from_csv() {
-    //     Ok(_) => (),
-    //     Err(e) => error!("{:?}", e),
-    // }
-    // // error!("{}", filename);
-    // // match lib.read_from_bin() {
-    // //     Ok(_) => (),
-    // //     Err(e) => error!("{:?}", e),
-    // // }
 
     // let (tx, rx): (Sender<PlayerRequests>, Receiver<PlayerRequests>) = mpsc::channel();
     // // let mut children = vec![];
