@@ -9,7 +9,8 @@ use crate::library::search::SearchDB;
 use crate::library::Library;
 // use crate::player::rodio_player::RodioPlayer;
 // use crate::player::symphonia_player::SymphoniaPlayer;
-use crate::player::{Player, PlayerRequests};
+use crate::player::symphonia_player::SymphoniaPlayer;
+use crate::player::Player;
 use crate::utils::constants::Requests::*;
 use core::time;
 use std::env;
@@ -33,6 +34,7 @@ fn main() {
     info!("Starting tarvrs...");
 
     // let args: Vec<String> = env::args().collect();
+    let player = SymphoniaPlayer::init();
     let mut lib = Library::new();
     // let filename = &args[1];
     // let result = lib.import_file(filename);
@@ -57,6 +59,8 @@ fn main() {
 
     let (main_tx, main_rx): (Sender<AppRequests>, Receiver<AppRequests>) = mpsc::channel();
     let (ui_tx, ui_rx): (Sender<UIRequests>, Receiver<UIRequests>) = mpsc::channel();
+    let (player_tx, player_rx): (Sender<PlayerRequests>, Receiver<PlayerRequests>) =
+        mpsc::channel();
 
     let songs = match lib.artist_map.get("Daft Punk") {
         Some(artist) => {
@@ -71,8 +75,11 @@ fn main() {
         None => Vec::new(),
     };
 
+    // player.start(selected_song.unwrap().clone());
+    // All threads should only take their own receiver and the transmitter to the main thread
     children.push(thread::spawn(move || ui::start(ui_rx, songs)));
-    children.push(thread::spawn(move || ui::input::listen_for_input(main_tx)));
+    children.push(thread::spawn(move || ui::input::listen(main_tx)));
+    children.push(thread::spawn(move || player.listen(player_rx)));
 
     loop {
         match main_rx.recv() {
@@ -91,13 +98,13 @@ fn main() {
                     info!("Gracefully shutting down");
                     std::process::exit(0);
                 }
-                AppRequests::UIUp => {
+                AppRequests::UIRequests(UIRequests::Up) => {
                     let _ = ui_tx.send(UIRequests::Up);
                 }
-                AppRequests::UIDown => {
+                AppRequests::UIRequests(UIRequests::Down) => {
                     let _ = ui_tx.send(UIRequests::Down);
                 }
-                AppRequests::UIEnter => {
+                AppRequests::UIRequests(UIRequests::Enter) => {
                     let _ = ui_tx.send(UIRequests::Enter);
                 }
                 _ => (),
@@ -155,5 +162,5 @@ fn main() {
 
     // // lib.save_to_csv();
     // // lib.save_to_bin();
-    // // test
+    // // tes
 }

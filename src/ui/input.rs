@@ -10,7 +10,7 @@ use std::{
 
 use crate::utils::constants::Requests::*;
 
-pub fn listen_for_input(main_tx: Sender<AppRequests>) {
+pub fn listen(main_tx: Sender<AppRequests>) {
     let tick_rate = Duration::from_millis(250);
     let mut last_tick = Instant::now();
     // let quit_keys = KeyEvent {
@@ -93,7 +93,7 @@ pub fn listen_for_input(main_tx: Sender<AppRequests>) {
     // }
 }
 
-fn get_key_lookup() -> HashMap<KeyEvent, AppRequests> {
+fn get_key_lookup<'a>() -> HashMap<KeyEvent, AppRequests<'a>> {
     let mut key_lookup: HashMap<KeyEvent, AppRequests> = HashMap::new();
     key_lookup.insert(
         KeyEvent {
@@ -114,35 +114,35 @@ fn get_key_lookup() -> HashMap<KeyEvent, AppRequests> {
             code: KeyCode::Char('j'),
             modifiers: KeyModifiers::NONE,
         },
-        AppRequests::UIDown,
+        AppRequests::UIRequests(UIRequests::Down),
     );
     key_lookup.insert(
         KeyEvent {
             code: KeyCode::Char('k'),
             modifiers: KeyModifiers::NONE,
         },
-        AppRequests::UIUp,
+        AppRequests::UIRequests(UIRequests::Up),
     );
     key_lookup.insert(
         KeyEvent {
             code: KeyCode::Enter,
             modifiers: KeyModifiers::NONE,
         },
-        AppRequests::UIEnter,
+        AppRequests::UIRequests(UIRequests::Enter),
     );
     key_lookup.insert(
         KeyEvent {
             code: KeyCode::Down,
             modifiers: KeyModifiers::NONE,
         },
-        AppRequests::UIDown,
+        AppRequests::UIRequests(UIRequests::Down),
     );
     key_lookup.insert(
         KeyEvent {
             code: KeyCode::Up,
             modifiers: KeyModifiers::NONE,
         },
-        AppRequests::UIUp,
+        AppRequests::UIRequests(UIRequests::Up),
     );
     return key_lookup;
 }

@@ -3,6 +3,8 @@ pub mod input;
 pub mod widgets;
 
 use crate::library::Song;
+use crate::player::symphonia_player::SymphoniaPlayer;
+use crate::player::Player;
 use crate::utils::constants::Requests::UIRequests::*;
 use crate::{library::Library, utils::constants::Requests::UIRequests};
 use std::{
