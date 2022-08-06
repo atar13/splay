@@ -5,12 +5,12 @@ pub mod widgets;
 use crate::library::Song;
 use crate::player::symphonia_player::SymphoniaPlayer;
 use crate::player::Player;
-use crate::utils::constants::Requests::UIRequests::*;
+use crate::utils::constants::Requests::{PlayerRequests, UIRequests::*};
 use crate::{library::Library, utils::constants::Requests::UIRequests};
 use std::{
     fmt::format,
     io::{self, Stdout},
-    sync::mpsc::Receiver,
+    sync::mpsc::{Receiver, Sender},
     time::{Duration, Instant},
 };
 use tui::layout::Alignment;
@@ -32,7 +32,7 @@ use tui::{
     Frame, Terminal,
 };
 
-pub fn start<'a>(rx: Receiver<UIRequests>, songs: Vec<Song>) {
+pub fn start<'a>(rx: Receiver<UIRequests>, songs: Vec<Song>, player_tx: Sender<PlayerRequests>) {
     info!("Starting up UI...");
 
     // initialize terminal state
@@ -51,7 +51,7 @@ pub fn start<'a>(rx: Receiver<UIRequests>, songs: Vec<Song>) {
     debug!("Terminal started successfully");
 
     let app = App::with_songs(songs);
-    app.run(&mut terminal, rx);
+    app.run(&mut terminal, rx, player_tx);
 
     info!("stopping now");
 
@@ -103,11 +103,12 @@ impl App {
         mut self,
         terminal: &mut Terminal<CrosstermBackend<Stdout>>,
         rx: Receiver<UIRequests>,
+        player_tx: Sender<PlayerRequests>,
     ) -> () {
         self.state.song_list.next(); // select first element
 
         loop {
-            terminal.draw(|f| self.get_ui(f)).unwrap();
+            terminal.draw(|f| self.get_ui(f, &player_tx)).unwrap();
             match rx.recv() {
                 Ok(request) => match request {
                     Up => self.on_up(),
@@ -140,7 +141,7 @@ impl App {
         self.tmp_show_popup = !self.tmp_show_popup;
     }
 
-    fn get_ui<B: Backend>(&mut self, frame: &mut Frame<B>) {
+    fn get_ui<B: Backend>(&mut self, frame: &mut Frame<B>, player_tx: &Sender<PlayerRequests>) {
         let size = frame.size();
         let block = Block::default().title("tarvrs").borders(Borders::ALL);
         frame.render_widget(block, size);
@@ -197,6 +198,11 @@ impl App {
             frame.render_widget(Clear, area);
             frame.render_widget(paragraph, block.inner(area));
             frame.render_widget(block, area);
+            player_tx.send(PlayerRequests::Start(
+                selected_song.unwrap().path.to_owned(),
+            ));
+        } else {
+            player_tx.send(PlayerRequests::Stop);
         }
     }
 }

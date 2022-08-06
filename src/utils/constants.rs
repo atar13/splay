@@ -9,22 +9,23 @@ pub mod Requests {
         Enter,
     }
 
-    #[derive(Debug, Copy, Clone)]
-    pub enum PlayerRequests<'a> {
+    #[derive(Debug, Clone)]
+    pub enum PlayerRequests {
         Stop,
-        Start(&'a str),
+        Start(String),
         Resume,
         Pause,
         Next,
         Previous,
         Seek(u64),
         ChangeVolume(f32),
+        Quit,
     }
 
-    #[derive(Debug, Copy, Clone)]
-    pub enum AppRequests<'a> {
+    #[derive(Debug, Clone)]
+    pub enum AppRequests {
         UIRequests(UIRequests),
-        PlayerRequests(PlayerRequests<'a>),
+        PlayerRequests(PlayerRequests),
         Quit,
     }
 }

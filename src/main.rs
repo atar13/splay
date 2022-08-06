@@ -40,7 +40,7 @@ fn main() {
     // let result = lib.import_file(filename);
     let result = lib.import_dir("/home/atarbinian/Desktop/sample"); // TODO: allow to use ~
 
-    // lib.save_to_csv();
+    lib.save_to_csv();
     match result {
         Ok(_) => (),
         Err(e) => error!("{}", e),
@@ -77,7 +77,10 @@ fn main() {
 
     // player.start(selected_song.unwrap().clone());
     // All threads should only take their own receiver and the transmitter to the main thread
-    children.push(thread::spawn(move || ui::start(ui_rx, songs)));
+    let ui_to_player_tx = player_tx.clone();
+    children.push(thread::spawn(move || {
+        ui::start(ui_rx, songs, ui_to_player_tx)
+    }));
     children.push(thread::spawn(move || ui::input::listen(main_tx)));
     children.push(thread::spawn(move || player.listen(player_rx)));
 
@@ -92,9 +95,11 @@ fn main() {
             Ok(request) => match request {
                 AppRequests::Quit => {
                     let _ = ui_tx.send(UIRequests::Quit);
-                    for child in children {
+                    let _ = player_tx.send(PlayerRequests::Stop);
+                    let _ = player_tx.send(PlayerRequests::Quit);
+                    let _ = for child in children {
                         let _ = child.join();
-                    }
+                    };
                     info!("Gracefully shutting down");
                     std::process::exit(0);
                 }

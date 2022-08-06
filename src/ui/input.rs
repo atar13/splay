@@ -31,7 +31,7 @@ pub fn listen(main_tx: Sender<AppRequests>) {
             if let Event::Key(key) = event::read().unwrap() {
                 match key_lookup.get(&key) {
                     Some(request) => {
-                        let _ = main_tx.send(*request);
+                        let _ = main_tx.send(request.to_owned());
                         match request {
                             AppRequests::Quit => break,
                             _ => (),
@@ -93,7 +93,7 @@ pub fn listen(main_tx: Sender<AppRequests>) {
     // }
 }
 
-fn get_key_lookup<'a>() -> HashMap<KeyEvent, AppRequests<'a>> {
+fn get_key_lookup<'a>() -> HashMap<KeyEvent, AppRequests> {
     let mut key_lookup: HashMap<KeyEvent, AppRequests> = HashMap::new();
     key_lookup.insert(
         KeyEvent {
@@ -144,5 +144,12 @@ fn get_key_lookup<'a>() -> HashMap<KeyEvent, AppRequests<'a>> {
         },
         AppRequests::UIRequests(UIRequests::Up),
     );
+    // key_lookup.insert(
+    //     KeyEvent {
+    //         code: KeyCode::Enter,
+    //         modifiers: KeyModifiers::NONE,
+    //     },
+    //     AppRequests::PlayerRequests(PlayerRequests::Start(())),
+    // );
     return key_lookup;
 }
