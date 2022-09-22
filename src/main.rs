@@ -38,7 +38,7 @@ fn main() {
     let mut lib = Library::new();
     // let filename = &args[1];
     // let result = lib.import_file(filename);
-    let result = lib.import_dir("/home/atarbinian/Desktop/sample"); // TODO: allow to use ~
+    let result = lib.import_dir("/home/atarbinian/Desktop/media"); // TODO: allow to use ~
 
     lib.save_to_csv();
     match result {
@@ -103,14 +103,8 @@ fn main() {
                     info!("Gracefully shutting down");
                     std::process::exit(0);
                 }
-                AppRequests::UIRequests(UIRequests::Up) => {
-                    let _ = ui_tx.send(UIRequests::Up);
-                }
-                AppRequests::UIRequests(UIRequests::Down) => {
-                    let _ = ui_tx.send(UIRequests::Down);
-                }
-                AppRequests::UIRequests(UIRequests::Enter) => {
-                    let _ = ui_tx.send(UIRequests::Enter);
+                AppRequests::UIRequests(request) => { 
+                    let _ = ui_tx.send(request);
                 }
                 _ => (),
             },

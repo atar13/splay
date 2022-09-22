@@ -75,6 +75,7 @@ struct State {
 pub struct App {
     state: State,
     tmp_show_popup: bool,
+    show_search: bool,
 }
 
 impl App {
@@ -85,6 +86,7 @@ impl App {
         App {
             state,
             tmp_show_popup: false,
+            show_search: false,
         }
     }
 
@@ -95,6 +97,7 @@ impl App {
         App {
             state,
             tmp_show_popup: false,
+            show_search: false,
         }
     }
 
@@ -114,6 +117,8 @@ impl App {
                     Up => self.on_up(),
                     Down => self.on_down(),
                     Enter => self.on_enter(),
+                    ShowSearch => self.show_search = true,
+                    GoBack => self.go_back(),
                     Quit => return,
                     _ => {
                         error!("This UI event is not implemented yet")
@@ -139,6 +144,12 @@ impl App {
 
     fn on_enter(&mut self) {
         self.tmp_show_popup = !self.tmp_show_popup;
+    }
+
+    fn go_back(&mut self) {
+        if self.show_search {
+            self.show_search = false;
+        }
     }
 
     fn get_ui<B: Backend>(&mut self, frame: &mut Frame<B>, player_tx: &Sender<PlayerRequests>) {
@@ -203,6 +214,10 @@ impl App {
             ));
         } else {
             player_tx.send(PlayerRequests::Stop);
+        }
+
+        if self.show_search {
+            widgets::search_popup::render(frame);
         }
     }
 }

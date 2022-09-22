@@ -7,6 +7,12 @@ pub mod Requests {
         Down,
         Quit,
         Enter,
+
+        GoBack,
+
+        ShowItemInfo,
+        ShowSearch,
+        SearchInput(char),
     }
 
     #[derive(Debug, Clone)]

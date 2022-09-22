@@ -151,5 +151,21 @@ fn get_key_lookup<'a>() -> HashMap<KeyEvent, AppRequests> {
     //     },
     //     AppRequests::PlayerRequests(PlayerRequests::Start(())),
     // );
+    key_lookup.insert(
+        KeyEvent {
+            code: KeyCode::Char('f'),
+            modifiers: KeyModifiers::CONTROL,
+        },
+        AppRequests::UIRequests(UIRequests::ShowSearch),
+    );
+
+    key_lookup.insert(
+        KeyEvent {
+            code: KeyCode::Esc,
+            modifiers: KeyModifiers::NONE,
+        },
+        AppRequests::UIRequests(UIRequests::GoBack),
+    );
+
     return key_lookup;
 }
