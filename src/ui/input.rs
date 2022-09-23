@@ -4,31 +4,30 @@ use crossterm::{
 };
 use std::{
     collections::HashMap,
-    sync::mpsc::Sender,
+    sync::{mpsc::Sender, Arc, Mutex},
     time::{Duration, Instant},
 };
 
-use crate::utils::constants::Requests::*;
+use crate::{utils::constants::Requests::*, state::AppState};
 
-pub fn listen(main_tx: Sender<AppRequests>) {
+pub fn listen(state: Arc<Mutex<AppState>>, main_tx: Sender<AppRequests>) {
     let tick_rate = Duration::from_millis(250);
     let mut last_tick = Instant::now();
-    // let quit_keys = KeyEvent {
-    //     code: KeyCode::Char('q'),
-    //     modifiers: KeyModifiers::NONE,
-    // } | KeyEvent {
-    //     code: KeyCode::Char('c'),
-    //     modifiers: KeyModifiers::CONTROL,
-    // };
-
     let key_lookup = get_key_lookup();
 
-    loop {
+    'input: loop {
         let timeout = tick_rate
             .checked_sub(last_tick.elapsed())
             .unwrap_or_else(|| Duration::from_secs(0));
         if crossterm::event::poll(timeout).unwrap() {
             if let Event::Key(key) = event::read().unwrap() {
+                info!("{}", state.lock().unwrap().searching);
+                if state.lock().unwrap().searching {
+                    if let KeyCode::Char(ch) = key.code {
+                        main_tx.send(AppRequests::UIRequests(UIRequests::SearchInput(ch)));
+                        continue 'input;
+                    }
+                }
                 match key_lookup.get(&key) {
                     Some(request) => {
                         let _ = main_tx.send(request.to_owned());

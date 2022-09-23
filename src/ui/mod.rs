@@ -5,8 +5,10 @@ pub mod widgets;
 use crate::library::Song;
 use crate::player::symphonia_player::SymphoniaPlayer;
 use crate::player::Player;
+use crate::state::AppState;
 use crate::utils::constants::Requests::{PlayerRequests, UIRequests::*};
 use crate::{library::Library, utils::constants::Requests::UIRequests};
+use std::sync::{Arc, Mutex};
 use std::{
     fmt::format,
     io::{self, Stdout},
@@ -32,7 +34,7 @@ use tui::{
     Frame, Terminal,
 };
 
-pub fn start<'a>(rx: Receiver<UIRequests>, songs: Vec<Song>, player_tx: Sender<PlayerRequests>) {
+pub fn start<'a>(state: Arc<Mutex<AppState>>, rx: Receiver<UIRequests>, songs: Vec<Song>, player_tx: Sender<PlayerRequests>) {
     info!("Starting up UI...");
 
     // initialize terminal state
@@ -50,7 +52,7 @@ pub fn start<'a>(rx: Receiver<UIRequests>, songs: Vec<Song>, player_tx: Sender<P
 
     debug!("Terminal started successfully");
 
-    let app = App::with_songs(songs);
+    let app = App::with_songs(state, songs);
     app.run(&mut terminal, rx, player_tx);
 
     info!("stopping now");
@@ -68,36 +70,26 @@ pub fn start<'a>(rx: Receiver<UIRequests>, songs: Vec<Song>, player_tx: Sender<P
     info!("Terminal cleaned successfully");
 }
 
-struct State {
-    song_list: StatefulList<Song>,
-}
-
 pub struct App {
-    state: State,
+    state: Arc<Mutex<AppState>>,
+    song_list: StatefulList<Song>,
     tmp_show_popup: bool,
-    show_search: bool,
 }
 
 impl App {
-    pub fn new() -> App {
-        let state = State {
-            song_list: StatefulList::with_items(vec![]),
-        };
+    pub fn new(state: Arc<Mutex<AppState>>) -> App {
         App {
             state,
+            song_list: StatefulList::with_items(vec![]),
             tmp_show_popup: false,
-            show_search: false,
         }
     }
 
-    pub fn with_songs(songs: Vec<Song>) -> App {
-        let state = State {
-            song_list: StatefulList::with_items(songs),
-        };
+    pub fn with_songs(state: Arc<Mutex<AppState>>, songs: Vec<Song>) -> App {
         App {
             state,
+            song_list: StatefulList::with_items(songs),
             tmp_show_popup: false,
-            show_search: false,
         }
     }
 
@@ -108,7 +100,7 @@ impl App {
         rx: Receiver<UIRequests>,
         player_tx: Sender<PlayerRequests>,
     ) -> () {
-        self.state.song_list.next(); // select first element
+        self.song_list.next(); // select first element
 
         loop {
             terminal.draw(|f| self.get_ui(f, &player_tx)).unwrap();
@@ -117,7 +109,8 @@ impl App {
                     Up => self.on_up(),
                     Down => self.on_down(),
                     Enter => self.on_enter(),
-                    ShowSearch => self.show_search = true,
+                    ShowSearch => self.state.lock().unwrap().searching = true,
+                    SearchInput(ch) => self.state.lock().unwrap().search_term.push(ch),
                     GoBack => self.go_back(),
                     Quit => return,
                     _ => {
@@ -135,11 +128,11 @@ impl App {
     }
 
     fn on_up(&mut self) {
-        self.state.song_list.previous()
+        self.song_list.previous()
     }
 
     fn on_down(&mut self) {
-        self.state.song_list.next();
+        self.song_list.next();
     }
 
     fn on_enter(&mut self) {
@@ -147,8 +140,9 @@ impl App {
     }
 
     fn go_back(&mut self) {
-        if self.show_search {
-            self.show_search = false;
+        if self.state.lock().unwrap().searching {
+            self.state.lock().unwrap().searching = false;
+            self.state.lock().unwrap().search_term.clear();
         }
     }
 
@@ -177,7 +171,6 @@ impl App {
         frame.render_widget(block, chunks[2]);
 
         let list: Vec<ListItem> = self
-            .state
             .song_list
             .items
             .iter()
@@ -193,16 +186,15 @@ impl App {
             )
             .highlight_symbol(">> ");
 
-        frame.render_stateful_widget(list, chunks[1], &mut self.state.song_list.state);
+        frame.render_stateful_widget(list, chunks[1], &mut self.song_list.state);
 
         if self.tmp_show_popup {
             let block = Block::default().title("Popup").borders(Borders::ALL);
             let area = helper::centered_rect(60, 60, size);
             let selected_song = self
-                .state
                 .song_list
                 .items
-                .get(self.state.song_list.state.selected().unwrap());
+                .get(self.song_list.state.selected().unwrap());
             let paragraph = Paragraph::new(format!("{:#?}", selected_song.unwrap()))
                 .style(Style::default().fg(Color::White))
                 .alignment(Alignment::Left);
@@ -216,8 +208,8 @@ impl App {
             player_tx.send(PlayerRequests::Stop);
         }
 
-        if self.show_search {
-            widgets::search_popup::render(frame);
+        if self.state.lock().unwrap().searching {
+            widgets::search_popup::render(frame, self.state.lock().unwrap().search_term.to_owned());
         }
     }
 }

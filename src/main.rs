@@ -4,13 +4,14 @@ mod player;
 mod queue;
 mod ui;
 mod utils;
+mod state;
 
 use crate::library::search::SearchDB;
 use crate::library::Library;
-// use crate::player::rodio_player::RodioPlayer;
-// use crate::player::symphonia_player::SymphoniaPlayer;
 use crate::player::symphonia_player::SymphoniaPlayer;
 use crate::player::Player;
+use crate::state::AppState;
+use crate::ui::input;
 use crate::utils::constants::Requests::*;
 use core::time;
 use std::env;
@@ -21,7 +22,7 @@ extern crate log;
 use simplelog::*;
 use std::fs::File;
 use std::io::BufReader;
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, Mutex};
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 
@@ -34,22 +35,16 @@ fn main() {
     info!("Starting tarvrs...");
 
     // let args: Vec<String> = env::args().collect();
+    
     let player = SymphoniaPlayer::init();
     let mut lib = Library::new();
-    // let filename = &args[1];
-    // let result = lib.import_file(filename);
-    let result = lib.import_dir("/home/atarbinian/Desktop/media"); // TODO: allow to use ~
-
-    lib.save_to_csv();
-    match result {
-        Ok(_) => (),
+    
+    match lib.import_dir("/home/atarbinian/Desktop/media") { // TODO: allow to use ~
+        Ok(_) => { lib.save_to_bin(); } ,
         Err(e) => error!("{}", e),
-    };
-    match lib.read_from_csv() {
-        Ok(_) => (),
-        Err(e) => error!("{:?}", e),
     }
-    // error!("{}", filename);
+    // info!("{} songs added", len())
+
     // match lib.read_from_bin() {
     //     Ok(_) => (),
     //     Err(e) => error!("{:?}", e),
@@ -62,26 +57,14 @@ fn main() {
     let (player_tx, player_rx): (Sender<PlayerRequests>, Receiver<PlayerRequests>) =
         mpsc::channel();
 
-    let songs = match lib.artist_map.get("Daft Punk") {
-        Some(artist) => {
-            let mut songs = Vec::new();
-            for album in &artist.album_titles {
-                for song_title in &lib.album_map.get(album).unwrap().song_titles {
-                    songs.push(lib.song_map.get(song_title).unwrap().clone())
-                }
-            }
-            songs
-        }
-        None => Vec::new(),
-    };
-
-    // player.start(selected_song.unwrap().clone());
+    let app_state = Arc::new(Mutex::new(AppState::new()));
+    let ui_app_state = app_state.clone();
+    let input_app_state = app_state.clone();
+    
     // All threads should only take their own receiver and the transmitter to the main thread
     let ui_to_player_tx = player_tx.clone();
-    children.push(thread::spawn(move || {
-        ui::start(ui_rx, songs, ui_to_player_tx)
-    }));
-    children.push(thread::spawn(move || ui::input::listen(main_tx)));
+    children.push(thread::spawn(move || ui::start(ui_app_state, ui_rx, lib.songs, ui_to_player_tx)));
+    children.push(thread::spawn(move || ui::input::listen(input_app_state, main_tx)));
     children.push(thread::spawn(move || player.listen(player_rx)));
 
     loop {

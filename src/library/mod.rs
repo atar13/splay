@@ -16,6 +16,7 @@ pub mod search;
 const UNKNOWN_ARTIST: &str = "Unknown Artist";
 const UNKNOWN_ALBUM: &str = "Unkwon Album";
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Artist {
     pub name: String,
     pub album_titles: Vec<String>,
@@ -42,12 +43,14 @@ pub struct Song {
     pub play_count: u32,
     pub track_number: Option<String>,
     pub path: String,
+    // artist: Box<Artist>
 }
 
 pub struct Library {
-    pub artist_map: HashMap<String, Artist>,
-    pub album_map: MultiMap<String, Album>,
-    pub song_map: MultiMap<String, Song>,
+    // pub artist_map: HashMap<String, Artist>,
+    // pub album_map: MultiMap<String, Album>,
+    // pub song_map: MultiMap<String, Song>,
+    pub songs: Vec<Song>
 }
 
 pub enum ImportError {
@@ -94,28 +97,20 @@ impl fmt::Debug for ImportError {
 impl Library {
     pub fn new() -> Library {
         Library {
-            artist_map: HashMap::new(),
-            album_map: MultiMap::new(),
-            song_map: MultiMap::new(),
+            // artist_map: HashMap::new(),
+            // album_map: MultiMap::new(),
+            // song_map: MultiMap::new(),
+            songs: Vec::new()
         }
     }
 
     // only support wav, mp3, flac
     pub fn import_file(&mut self, filepath: &str) -> Result<(), Box<dyn Error>> {
-        let path;
-        if Path::new(filepath).exists() {
-            path = fs::canonicalize(filepath);
-            // match fs::canonicalize(filepath) {
-            //     Ok(tmp) => {
-            //         path = Some(tmp.into_os_string().to_str().unwrap().as_bytes());
-            //     },
-            //     _ => {
-            //         path = None;
-            //     }
-            // }
+        let path = if Path::new(filepath).exists() {
+            fs::canonicalize(filepath)
         } else {
             return Err(Box::new(ImportError::FileNotFound));
-        }
+        };
 
         match read_from_path(filepath, false) {
             Ok(file) => {
@@ -163,31 +158,6 @@ impl Library {
                             _ => genre = None,
                         };
 
-                        // let album_artist_arc;
-
-                        // match self.artist_map.get(track_artist) {
-                        //     Some(artist_arc) => {
-                        //         album_artist_arc = artist_arc.clone();
-                        //     }
-                        //     None => {
-                        //         let new_artist = Artist {
-                        //             name: album_artist.to_string(),
-                        //             album_titles: vec![album_title.to_string()],
-                        //             play_count: 0,
-                        //         };
-                        //         album_artist_arc = Arc::new(Mutex::new(new_artist));
-                        //     }
-                        // }
-
-                        // let new_album = Album {
-                        //     title: album_title.to_string(),
-                        //     song_titles: vec![title.to_owned()],
-                        //     artist_name: album_artist.to_owned(),
-                        //     year,
-                        //     genre,
-                        //     play_count: 0,
-                        // };
-                        // let new_album_arc = Arc::new(Mutex::new(new_album));
                         match path {
                             Ok(tmp) => {
                                 let duration_str = format!(
@@ -207,40 +177,42 @@ impl Library {
                                     track_number,
                                     path: tmp.to_str().unwrap().to_string(),
                                 };
-                                self.song_map.insert(title.to_string(), new_song);
 
-                                match self.album_map.get_vec_mut(album_title) {
-                                    Some(albums) => {
-                                        for album in albums {
-                                            if album.artist_name == album_artist {
-                                                album.song_titles.push(title.to_string());
-                                            }
-                                        }
-                                    }
-                                    None => {
-                                        let new_album = Album {
-                                            title: album_title.to_string(),
-                                            song_titles: vec![title.to_owned()],
-                                            artist_name: album_artist.to_owned(),
-                                            play_count: 0,
-                                        };
-                                        self.album_map.insert(album_title.to_string(), new_album);
-                                    }
-                                }
-                                match self.artist_map.get_mut(album_artist) {
-                                    Some(artist) => {
-                                        artist.album_titles.push(album_title.to_string());
-                                    }
-                                    None => {
-                                        let new_artist = Artist {
-                                            name: album_artist.to_string(),
-                                            album_titles: vec![album_title.to_string()],
-                                            play_count: 0,
-                                        };
-                                        self.artist_map
-                                            .insert(album_artist.to_string(), new_artist);
-                                    }
-                                }
+                                // self.song_map.insert(title.to_string(), new_song);
+                                self.songs.push(new_song);
+
+                                // match self.album_map.get_vec_mut(album_title) {
+                                //     Some(albums) => {
+                                //         for album in albums {
+                                //             if album.artist_name == album_artist {
+                                //                 album.song_titles.push(title.to_string());
+                                //             }
+                                //         }
+                                //     }
+                                //     None => {
+                                //         let new_album = Album {
+                                //             title: album_title.to_string(),
+                                //             song_titles: vec![title.to_owned()],
+                                //             artist_name: album_artist.to_owned(),
+                                //             play_count: 0,
+                                //         };
+                                //         self.album_map.insert(album_title.to_string(), new_album);
+                                //     }
+                                // }
+                                // match self.artist_map.get_mut(album_artist) {
+                                //     Some(artist) => {
+                                //         artist.album_titles.push(album_title.to_string());
+                                //     }
+                                //     None => {
+                                //         let new_artist = Artist {
+                                //             name: album_artist.to_string(),
+                                //             album_titles: vec![album_title.to_string()],
+                                //             play_count: 0,
+                                //         };
+                                //         self.artist_map
+                                //             .insert(album_artist.to_string(), new_artist);
+                                //     }
+                                // }
                             }
                             Err(e) => {
                                 return Err(Box::new(e));
@@ -272,7 +244,7 @@ impl Library {
         info!(
             "Took {:.3?} to import {} files from {}",
             elapsed,
-            self.song_map.len(),
+            self.songs.len(),
             dir_path
         );
         Ok(())
@@ -308,7 +280,7 @@ impl Library {
         // wtr.write_record(&["Title", "AlbumTitle", "ArtistName", "Duration", "PlayCount", "TrackNumber", "Path"])?;
         // let mut sorted : Vec<_> = self.song_map.iter().collect();
         // sorted.sort_by_key(|a| a.0);
-        for (_, song) in self.song_map.iter() {
+        for song in self.songs.iter() {
             match wtr.serialize(song) {
                 Ok(_) => (),
                 Err(e) => error!("{:?}", e),
@@ -323,7 +295,7 @@ impl Library {
 
     pub fn save_to_bin(&self) -> Result<(), Box<dyn Error>> {
         let db_file = fs::File::create("db").unwrap();
-        for (_, song) in self.song_map.iter() {
+        for song in self.songs.iter() {
             bincode::serialize_into(&db_file, song);
         }
         Ok(())
@@ -342,7 +314,7 @@ impl Library {
             match result {
                 Ok(song) => {
                     // println!("{}", song.title);
-                    self.song_map.insert(song.title.to_string(), song);
+                    self.songs.push(song);
                 }
                 Err(e) => {
                     error!("{:?}", e);
@@ -353,46 +325,46 @@ impl Library {
         Ok(())
     }
 
-    pub fn read_from_csv(&mut self) -> Result<(), Box<dyn Error>> {
-        let db_file = fs::File::open("db.csv")?;
-        let mut reader = csv::Reader::from_reader(db_file);
-        for result in reader.deserialize() {
-            let song: Song = result?;
-            match self.album_map.get_vec_mut(song.album_title.as_str()) {
-                Some(albums) => {
-                    for album in albums {
-                        if album.artist_name == song.album_artist {
-                            album.play_count += song.play_count;
-                            album.song_titles.push(song.title.to_string());
-                        }
-                    }
-                }
-                None => {
-                    let album = Album {
-                        title: song.album_title.to_string(),
-                        artist_name: song.album_artist.to_string(),
-                        play_count: song.play_count,
-                        song_titles: vec![song.title.to_string()],
-                    };
-                    self.album_map.insert(album.title.to_string(), album);
-                }
-            }
-            match self.artist_map.get_mut(song.album_artist.as_str()) {
-                Some(artist) => {
-                    artist.play_count += song.play_count;
-                    artist.album_titles.push(song.album_title.to_string());
-                }
-                None => {
-                    let artist = Artist {
-                        name: song.album_artist.to_string(),
-                        album_titles: vec![song.album_title.to_string()],
-                        play_count: song.play_count,
-                    };
-                    self.artist_map.insert(artist.name.to_string(), artist);
-                }
-            }
-            self.song_map.insert(song.title.to_owned(), song);
-        }
-        Ok(())
-    }
+//     pub fn read_from_csv(&mut self) -> Result<(), Box<dyn Error>> {
+//         let db_file = fs::File::open("db.csv")?;
+//         let mut reader = csv::Reader::from_reader(db_file);
+//         for result in reader.deserialize() {
+//             let song: Song = result?;
+//             match self.album_map.get_vec_mut(song.album_title.as_str()) {
+//                 Some(albums) => {
+//                     for album in albums {
+//                         if album.artist_name == song.album_artist {
+//                             album.play_count += song.play_count;
+//                             album.song_titles.push(song.title.to_string());
+//                         }
+//                     }
+//                 }
+//                 None => {
+//                     let album = Album {
+//                         title: song.album_title.to_string(),
+//                         artist_name: song.album_artist.to_string(),
+//                         play_count: song.play_count,
+//                         song_titles: vec![song.title.to_string()],
+//                     };
+//                     self.album_map.insert(album.title.to_string(), album);
+//                 }
+//             }
+//             match self.artist_map.get_mut(song.album_artist.as_str()) {
+//                 Some(artist) => {
+//                     artist.play_count += song.play_count;
+//                     artist.album_titles.push(song.album_title.to_string());
+//                 }
+//                 None => {
+//                     let artist = Artist {
+//                         name: song.album_artist.to_string(),
+//                         album_titles: vec![song.album_title.to_string()],
+//                         play_count: song.play_count,
+//                     };
+//                     self.artist_map.insert(artist.name.to_string(), artist);
+//                 }
+//             }
+//             self.song_map.insert(song.title.to_owned(), song);
+//         }
+//         Ok(())
+//     }
 }
