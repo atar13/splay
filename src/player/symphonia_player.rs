@@ -53,10 +53,11 @@ impl SymphoniaPlayer {
         // anytime we get a stop inside this loop then we break
         // anytime we get a pause then we continue (but don't leave this loop back to the song setup)
         let _ = loop {
-            match rx.try_recv() {
+            match rx.recv() {
                 Ok(request) => match request {
                     PlayerRequests::Start(path) => {
                         //init setup for a song
+                        app_state.lock().unwrap().curr_state = PlayerStates::PLAYING;
 
                         let song_path = Path::new(&path);
 
@@ -116,8 +117,11 @@ impl SymphoniaPlayer {
                         loop {
                             match rx.try_recv() {
                                 Ok(request) => match request {
-                                    PlayerRequests::Stop => break,
-                                    PlayerRequests::Pause => continue,
+                                    PlayerRequests::Stop => app_state.lock().unwrap().curr_state = PlayerStates::STOPPED,
+                                    PlayerRequests::Pause => app_state.lock().unwrap().curr_state = PlayerStates::PAUSED,
+                                    PlayerRequests::Resume => {
+                                        app_state.lock().unwrap().curr_state = PlayerStates::PLAYING
+                                    }
                                     _ => (),
                                 },
                                 Err(err) => match err {
@@ -131,32 +135,39 @@ impl SymphoniaPlayer {
                                 },
                             }
 
-                            let packet = match format.next_packet() {
-                                Ok(packet) => packet,
-                                Err(err) => return,
-                            };
+                            match app_state.lock().unwrap().curr_state {
+                                PlayerStates::PLAYING => {
+                                    let packet = match format.next_packet() {
+                                        Ok(packet) => packet,
+                                        Err(..) => return,
+                                    };
 
-                            if packet.track_id() != track_id {
-                                continue;
-                            }
+                                    if packet.track_id() != track_id {
+                                        continue;
+                                    }
 
-                            while !format.metadata().is_latest() {
-                                format.metadata().pop();
+                                    while !format.metadata().is_latest() {
+                                        format.metadata().pop();
 
-                                if let Some(rev) = format.metadata().current() {
-                                    info!("{:?}", rev);
+                                        if let Some(rev) = format.metadata().current() {
+                                            info!("{:?}", rev);
+                                        }
+                                    }
+
+                                    let _ =
+                                        decode_and_play(&mut audio_output, &mut decoder, packet);
                                 }
+                                PlayerStates::STOPPED => break,
+                                PlayerStates::PAUSED => continue,
                             }
-
-                            let _ = decode_and_play(&mut audio_output, &mut decoder, packet);
                         }
                     }
                     PlayerRequests::Quit => return,
                     _ => (),
                 },
                 Err(err) => match err {
-                    TryRecvError::Empty => (),
-                    TryRecvError::Disconnected => {
+                    // TryRecvError::Empty => (),
+                    RecvError => {
                         error!(
                             "Could not receive request to player app state. Reason: {}",
                             err.to_string()
@@ -164,21 +175,18 @@ impl SymphoniaPlayer {
                     }
                 },
             }
-            // if let Some(audio_output) = audio_output.as_mut() {
-            //     audio_output.flush()
-            // }
         };
     }
 
     // TODO: change song to 'str path
     fn resume(&mut self) {
-        match self.curr_state {
-            PlayerStates::PAUSED => self.curr_state = PlayerStates::PLAYING,
-            _ => (),
-        }
+        // match self.curr_state {
+        //     PlayerStates::PAUSED => self.curr_state = PlayerStates::PLAYING,
+        //     _ => (),
+        // }
     }
     fn stop(&mut self) {
-        self.curr_state = PlayerStates::STOPPED;
+        // self.curr_state = PlayerStates::STOPPED;
     }
     fn next(self) {
         unimplemented!()
