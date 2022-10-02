@@ -16,6 +16,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tui::layout::Alignment;
+use tui::widgets::Wrap;
 use widgets::stateful_list::StatefulList;
 
 use crossterm::{
@@ -34,7 +35,12 @@ use tui::{
     Frame, Terminal,
 };
 
-pub fn start<'a>(state: Arc<Mutex<AppState>>, rx: Receiver<UIRequests>, songs: Vec<Song>, player_tx: Sender<PlayerRequests>) {
+pub fn start<'a>(
+    state: Arc<Mutex<AppState>>,
+    rx: Receiver<UIRequests>,
+    songs: Vec<Song>,
+    player_tx: Sender<PlayerRequests>,
+) {
     info!("Starting up UI...");
 
     // initialize terminal state
@@ -157,8 +163,8 @@ impl App {
             .constraints(
                 [
                     Constraint::Percentage(10),
-                    Constraint::Percentage(80),
-                    Constraint::Percentage(10),
+                    Constraint::Percentage(70),
+                    Constraint::Percentage(20),
                 ]
                 .as_ref(),
             )
@@ -187,6 +193,7 @@ impl App {
             .highlight_symbol(">> ");
 
         frame.render_stateful_widget(list, chunks[1], &mut self.song_list.state);
+        widgets::curr_playing_bar::render(frame, chunks[2], &(self.state.lock().unwrap()));
 
         if self.tmp_show_popup {
             let block = Block::default().title("Popup").borders(Borders::ALL);
@@ -204,12 +211,20 @@ impl App {
             player_tx.send(PlayerRequests::Start(
                 selected_song.unwrap().path.to_owned(),
             ));
+            self.state.lock().unwrap().curr_song = Some(selected_song.unwrap().to_owned());
         } else {
             player_tx.send(PlayerRequests::Stop);
         }
 
         if self.state.lock().unwrap().searching {
-            widgets::search_popup::render(frame, self.state.lock().unwrap().search_term.to_owned());
+            // widgets::search_popup::render(frame, self.state.lock().unwrap().search_term.to_owned());
+            let search = Paragraph::new(self.state.lock().unwrap().search_term.to_owned())
+                .style(Style::default().fg(Color::White))
+                .alignment(Alignment::Center)
+                .wrap(Wrap { trim: false });
+            frame.render_widget(Clear, chunks[0]);
+            frame.render_widget(search, chunks[0])
         }
+
     }
 }

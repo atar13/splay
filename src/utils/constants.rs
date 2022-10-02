@@ -45,3 +45,9 @@ pub mod Errors {
         AudioDeviceNotFound,
     }
 }
+
+pub enum PlayerStates {
+    STOPPED,
+    PLAYING,
+    PAUSED,
+}

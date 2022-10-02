@@ -8,7 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{utils::constants::Requests::*, state::AppState};
+use crate::{state::AppState, utils::constants::Requests::*};
 
 pub fn listen(state: Arc<Mutex<AppState>>, main_tx: Sender<AppRequests>) {
     let tick_rate = Duration::from_millis(250);
@@ -21,7 +21,6 @@ pub fn listen(state: Arc<Mutex<AppState>>, main_tx: Sender<AppRequests>) {
             .unwrap_or_else(|| Duration::from_secs(0));
         if crossterm::event::poll(timeout).unwrap() {
             if let Event::Key(key) = event::read().unwrap() {
-                info!("{}", state.lock().unwrap().searching);
                 if state.lock().unwrap().searching {
                     if let KeyCode::Char(ch) = key.code {
                         main_tx.send(AppRequests::UIRequests(UIRequests::SearchInput(ch)));
@@ -164,6 +163,22 @@ fn get_key_lookup<'a>() -> HashMap<KeyEvent, AppRequests> {
             modifiers: KeyModifiers::NONE,
         },
         AppRequests::UIRequests(UIRequests::GoBack),
+    );
+
+    key_lookup.insert(
+        KeyEvent {
+            code: KeyCode::Char('p'),
+            modifiers: KeyModifiers::NONE,
+        },
+        AppRequests::PlayerRequests(PlayerRequests::Pause),
+    );
+
+    key_lookup.insert(
+        KeyEvent {
+            code: KeyCode::Char(' '),
+            modifiers: KeyModifiers::NONE,
+        },
+        AppRequests::PlayerRequests(PlayerRequests::Resume),
     );
 
     return key_lookup;

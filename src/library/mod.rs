@@ -50,7 +50,7 @@ pub struct Library {
     // pub artist_map: HashMap<String, Artist>,
     // pub album_map: MultiMap<String, Album>,
     // pub song_map: MultiMap<String, Song>,
-    pub songs: Vec<Song>
+    pub songs: Vec<Song>,
 }
 
 pub enum ImportError {
@@ -100,7 +100,7 @@ impl Library {
             // artist_map: HashMap::new(),
             // album_map: MultiMap::new(),
             // song_map: MultiMap::new(),
-            songs: Vec::new()
+            songs: Vec::new(),
         }
     }
 
@@ -325,46 +325,46 @@ impl Library {
         Ok(())
     }
 
-//     pub fn read_from_csv(&mut self) -> Result<(), Box<dyn Error>> {
-//         let db_file = fs::File::open("db.csv")?;
-//         let mut reader = csv::Reader::from_reader(db_file);
-//         for result in reader.deserialize() {
-//             let song: Song = result?;
-//             match self.album_map.get_vec_mut(song.album_title.as_str()) {
-//                 Some(albums) => {
-//                     for album in albums {
-//                         if album.artist_name == song.album_artist {
-//                             album.play_count += song.play_count;
-//                             album.song_titles.push(song.title.to_string());
-//                         }
-//                     }
-//                 }
-//                 None => {
-//                     let album = Album {
-//                         title: song.album_title.to_string(),
-//                         artist_name: song.album_artist.to_string(),
-//                         play_count: song.play_count,
-//                         song_titles: vec![song.title.to_string()],
-//                     };
-//                     self.album_map.insert(album.title.to_string(), album);
-//                 }
-//             }
-//             match self.artist_map.get_mut(song.album_artist.as_str()) {
-//                 Some(artist) => {
-//                     artist.play_count += song.play_count;
-//                     artist.album_titles.push(song.album_title.to_string());
-//                 }
-//                 None => {
-//                     let artist = Artist {
-//                         name: song.album_artist.to_string(),
-//                         album_titles: vec![song.album_title.to_string()],
-//                         play_count: song.play_count,
-//                     };
-//                     self.artist_map.insert(artist.name.to_string(), artist);
-//                 }
-//             }
-//             self.song_map.insert(song.title.to_owned(), song);
-//         }
-//         Ok(())
-//     }
+    //     pub fn read_from_csv(&mut self) -> Result<(), Box<dyn Error>> {
+    //         let db_file = fs::File::open("db.csv")?;
+    //         let mut reader = csv::Reader::from_reader(db_file);
+    //         for result in reader.deserialize() {
+    //             let song: Song = result?;
+    //             match self.album_map.get_vec_mut(song.album_title.as_str()) {
+    //                 Some(albums) => {
+    //                     for album in albums {
+    //                         if album.artist_name == song.album_artist {
+    //                             album.play_count += song.play_count;
+    //                             album.song_titles.push(song.title.to_string());
+    //                         }
+    //                     }
+    //                 }
+    //                 None => {
+    //                     let album = Album {
+    //                         title: song.album_title.to_string(),
+    //                         artist_name: song.album_artist.to_string(),
+    //                         play_count: song.play_count,
+    //                         song_titles: vec![song.title.to_string()],
+    //                     };
+    //                     self.album_map.insert(album.title.to_string(), album);
+    //                 }
+    //             }
+    //             match self.artist_map.get_mut(song.album_artist.as_str()) {
+    //                 Some(artist) => {
+    //                     artist.play_count += song.play_count;
+    //                     artist.album_titles.push(song.album_title.to_string());
+    //                 }
+    //                 None => {
+    //                     let artist = Artist {
+    //                         name: song.album_artist.to_string(),
+    //                         album_titles: vec![song.album_title.to_string()],
+    //                         play_count: song.play_count,
+    //                     };
+    //                     self.artist_map.insert(artist.name.to_string(), artist);
+    //                 }
+    //             }
+    //             self.song_map.insert(song.title.to_owned(), song);
+    //         }
+    //         Ok(())
+    //     }
 }

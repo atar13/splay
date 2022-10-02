@@ -9,27 +9,24 @@ use symphonia::core::probe::Hint;
 use crate::library::Song;
 use crate::player::{Player, PlayerRequests};
 use crate::queue::SongQueue;
+use crate::state::AppState;
+use crate::utils::constants::PlayerStates;
 use std::error::Error;
 use std::fs::File;
 use std::path::Path;
-use std::sync::mpsc::{self, TryRecvError};
+use std::sync::{Mutex, Arc};
+use std::sync::mpsc::{self, RecvError, TryRecvError};
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread::JoinHandle;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use super::output;
 
 pub struct SymphoniaPlayer {
-    curr_song: Option<Song>,
-    queue: SongQueue,
-    curr_volume: f32,
-    curr_state: PlayerStates,
-}
-
-enum PlayerStates {
-    STOPPED,
-    PLAYING,
-    PAUSED,
+    // curr_song: Option<Song>,
+    // queue: SongQueue,
+    // curr_volume: f32,
+    // curr_state: PlayerStates,
 }
 
 // one "listen" or run method that reads from the receiver
@@ -40,14 +37,14 @@ enum PlayerStates {
 impl SymphoniaPlayer {
     pub fn init() -> SymphoniaPlayer {
         SymphoniaPlayer {
-            curr_song: None,
-            queue: SongQueue::new(),
-            curr_volume: 0.,
-            curr_state: PlayerStates::STOPPED,
+            // curr_song: None,
+            // queue: SongQueue::new(),
+            // curr_volume: 0.,
+            // curr_state: PlayerStates::STOPPED,
         }
     }
 
-    pub fn listen(mut self, rx: std::sync::mpsc::Receiver<PlayerRequests>) {
+    pub fn listen(mut self, rx: std::sync::mpsc::Receiver<PlayerRequests>, app_state: Arc<Mutex<AppState>>) {
         //listen for some events
         // if we are asked to play do some song setup
         // then go into a playing mode
