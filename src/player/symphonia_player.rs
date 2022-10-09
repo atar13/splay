@@ -1,65 +1,65 @@
-use cpal::traits::{DeviceTrait, StreamTrait};
-use cpal::{Device, SupportedStreamConfig};
 use symphonia::core::codecs::{Decoder, DecoderOptions, CODEC_TYPE_NULL};
 use symphonia::core::formats::{FormatOptions, FormatReader};
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 
-use crate::library::Song;
-use crate::player::{Player, PlayerRequests};
-use crate::queue::SongQueue;
+use crate::player::PlayerRequests;
 use crate::state::AppState;
 use crate::utils::constants::PlayerStates;
-use std::error::Error;
+use crate::utils::constants::Requests::AppRequests;
 use std::fs::File;
 use std::path::Path;
-use std::sync::{Mutex, Arc};
-use std::sync::mpsc::{self, RecvError, TryRecvError};
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::{Mutex, Arc, mpsc};
+use std::sync::mpsc::{RecvError, TryRecvError, Sender};
+use std::sync::mpsc::Receiver;
 use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
 
 use super::output;
 
 pub struct SymphoniaPlayer {
-    // curr_song: Option<Song>,
-    // queue: SongQueue,
-    // curr_volume: f32,
-    // curr_state: PlayerStates,
 }
 
-// one "listen" or run method that reads from the receiver
-// listen may also store device info for playback
-// start method will start a given song and store
-// pause/resume/stop will modify the current stream based on info stored by listen
-// impl Player for SymphoniaPlayer {
 impl SymphoniaPlayer {
     pub fn init() -> SymphoniaPlayer {
         SymphoniaPlayer {
-            // curr_song: None,
-            // queue: SongQueue::new(),
-            // curr_volume: 0.,
-            // curr_state: PlayerStates::STOPPED,
         }
     }
 
-    pub fn listen(mut self, rx: std::sync::mpsc::Receiver<PlayerRequests>, app_state: Arc<Mutex<AppState>>) {
-        //listen for some events
-        // if we are asked to play do some song setup
-        // then go into a playing mode
-        // still (or start inside this loop) to listen for requests but plays a packet on each iteration
-        // we are only living inside this "playing loop"
-        // anytime we get a stop inside this loop then we break
-        // anytime we get a pause then we continue (but don't leave this loop back to the song setup)
+    pub fn listen(mut self, app_state: Arc<Mutex<AppState>>, rx: Receiver<PlayerRequests>, main_tx: Sender<AppRequests>) {
+
+        let mut player_join_handle : Option<JoinHandle<()>> = None;
+
+
+        // this loop listens for requests
         let _ = loop {
             match rx.recv() {
                 Ok(request) => match request {
-                    PlayerRequests::Start(path) => {
+                    PlayerRequests::Stop => {
+                        app_state.lock().unwrap().player.curr_state = PlayerStates::STOPPED;
+                        player_join_handle.take().map(JoinHandle::join);
+                    },
+                    PlayerRequests::Pause => {
+                        app_state.lock().unwrap().player.curr_state = PlayerStates::PAUSED;
+                    },
+                    PlayerRequests::Resume => {
+                        app_state.lock().unwrap().player.curr_state = PlayerStates::PLAYING;
+                    },
+                    PlayerRequests::Start => {
+                        // info!("hi");
+                        app_state.lock().unwrap().player.curr_state = PlayerStates::STOPPED;
+                        player_join_handle.take().map(JoinHandle::join);
+                        app_state.lock().unwrap().player.curr_state = PlayerStates::PLAYING;
+                        //TODO: this blocks curr thread // 
+                        // info!("hi there");
+                        
                         //init setup for a song
-                        app_state.lock().unwrap().curr_state = PlayerStates::PLAYING;
-
-                        let song_path = Path::new(&path);
+                        let x = app_state.lock().unwrap(); 
+                        let song = match &x.ui.selected_song {
+                            Some(song) => song,
+                            None => continue,
+                        };
+                        let song_path = Path::new(&song.path);
 
                         let mut hint = Hint::new();
 
@@ -72,7 +72,7 @@ impl SymphoniaPlayer {
                         let source = match File::open(song_path) {
                             Ok(f) => Box::new(f),
                             Err(err) => {
-                                panic!("Could not open song at path {}. Reason: {}", path, err)
+                                panic!("Could not open song at path {}. Reason: {}", song.path, err)
                             }
                         };
 
@@ -91,6 +91,7 @@ impl SymphoniaPlayer {
                             .expect("unsupported media format");
 
                         let mut format = probed.format;
+
                         // Finds the first decodable track
                         let track = format
                             .tracks()
@@ -99,7 +100,6 @@ impl SymphoniaPlayer {
                             .expect("No supported audio track");
 
                         let track_id = track.id;
-                        let mut audio_output: Option<Box<dyn output::AudioOutput>> = None;
 
                         let dec_opts: DecoderOptions = Default::default();
                         let track = match format.tracks().iter().find(|track| track.id == track_id)
@@ -114,53 +114,8 @@ impl SymphoniaPlayer {
                             .make(&track.codec_params, &dec_opts)
                             .expect("unsupported codec");
 
-                        loop {
-                            match rx.try_recv() {
-                                Ok(request) => match request {
-                                    PlayerRequests::Stop => app_state.lock().unwrap().curr_state = PlayerStates::STOPPED,
-                                    PlayerRequests::Pause => app_state.lock().unwrap().curr_state = PlayerStates::PAUSED,
-                                    PlayerRequests::Resume => {
-                                        app_state.lock().unwrap().curr_state = PlayerStates::PLAYING
-                                    }
-                                    _ => (),
-                                },
-                                Err(err) => match err {
-                                    TryRecvError::Empty => (),
-                                    TryRecvError::Disconnected => {
-                                        error!(
-                                        "Could not receive request to player app state. Reason: {}",
-                                        err.to_string()
-                                    );
-                                    }
-                                },
-                            }
-
-                            match app_state.lock().unwrap().curr_state {
-                                PlayerStates::PLAYING => {
-                                    let packet = match format.next_packet() {
-                                        Ok(packet) => packet,
-                                        Err(..) => return,
-                                    };
-
-                                    if packet.track_id() != track_id {
-                                        continue;
-                                    }
-
-                                    while !format.metadata().is_latest() {
-                                        format.metadata().pop();
-
-                                        if let Some(rev) = format.metadata().current() {
-                                            info!("{:?}", rev);
-                                        }
-                                    }
-
-                                    let _ =
-                                        decode_and_play(&mut audio_output, &mut decoder, packet);
-                                }
-                                PlayerStates::STOPPED => break,
-                                PlayerStates::PAUSED => continue,
-                            }
-                        }
+                        let cloned_state = app_state.clone();
+                        player_join_handle = Some(std::thread::spawn(move || player(cloned_state, &mut format, track_id, &mut decoder)));
                     }
                     PlayerRequests::Quit => return,
                     _ => (),
@@ -202,6 +157,58 @@ impl SymphoniaPlayer {
     }
 }
 
+fn player(
+    app_state: Arc<Mutex<AppState>>,
+    format: &mut Box<dyn FormatReader>,
+    track_id: u32,
+    decoder: &mut Box<dyn Decoder>
+    ) {
+    let mut audio_output = None;
+    loop {
+        match app_state.lock().unwrap().player.curr_state {
+            PlayerStates::STOPPED => break,
+            _ => (),
+        }
+        // match player_rx.try_recv() {
+        //     Ok(request) => match request {
+        //             PlayerRequests::Stop => break,
+        //             PlayerRequests::Pause => continue,
+        //             PlayerRequests::Resume => {}
+        //         _ => (),
+        //     },
+        //     Err(err) => match err {
+        //         TryRecvError::Empty => (),
+        //         TryRecvError::Disconnected => {
+        //             error!(
+        //             "Could not receive request to player app state. Reason: {}",
+        //             err.to_string()
+        //         );
+        //         }
+        //     },
+        // }
+
+        let packet = match format.next_packet() {
+            Ok(packet) => packet,
+            Err(..) => return,
+        };
+
+        if packet.track_id() != track_id {
+            continue;
+        }
+
+        while !format.metadata().is_latest() {
+            format.metadata().pop();
+
+            if let Some(rev) = format.metadata().current() {
+                info!("{:?}", rev);
+            }
+        }
+
+        let _ =
+            decode_and_play(&mut audio_output, decoder, packet);
+    }
+}
+
 fn decode_and_play(
     audio_output: &mut Option<Box<dyn output::AudioOutput>>,
     decoder: &mut Box<dyn Decoder>,
@@ -227,3 +234,4 @@ fn decode_and_play(
     }
     Ok(())
 }
+

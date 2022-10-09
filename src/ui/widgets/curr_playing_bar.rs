@@ -14,19 +14,19 @@ use tui::{
 use crate::{queue::SongQueue, state::AppState, utils::constants::PlayerStates};
 
 pub fn render(frame: &mut Frame<impl tui::backend::Backend>, area: Rect, state: &AppState) {
-    match &state.curr_song {
+    match &state.player.curr_song {
         None => (),
         Some(song) => error!("{}", song.title.to_owned()),
     };
 
 
-    let song_title = match &state.curr_song {
+    let song_title = match &state.player.curr_song {
         None => Span::raw("N/A"),
         Some(song) => Span::raw(song.title.to_owned()),
     };
 
-    let curr_time = Span::raw(readable_time(state.curr_secs));
-    let total_time = match &state.curr_song {
+    let curr_time = Span::raw(readable_time(state.player.curr_secs));
+    let total_time = match &state.player.curr_song {
         None => Span::raw("00:00"),
         Some(song) => Span::raw(song.duration.to_owned()),
     };
@@ -40,7 +40,7 @@ pub fn render(frame: &mut Frame<impl tui::backend::Backend>, area: Rect, state: 
         )
         .percent(20);
 
-    let play_status = match &state.curr_state {
+    let play_status = match &state.player.curr_state {
         PlayerStates::PLAYING => Span::raw("Playing"),
         PlayerStates::STOPPED => Span::raw("Stopped"),
         PlayerStates::PAUSED => Span::raw("Paused"),

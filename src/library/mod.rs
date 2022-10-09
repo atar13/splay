@@ -1,16 +1,11 @@
-use lofty::{read_from_path, ItemKey, Probe, Tag};
-use multimap::MultiMap;
-use std::collections::HashMap;
-use std::error::Error;
 use std::fmt;
 use std::fs;
-// use std::fs::File;
 use bincode;
+use std::error::Error;
+use lofty::{read_from_path, ItemKey};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 use std::time::Instant;
-// use std::io::BufReader;
 pub mod search;
 
 const UNKNOWN_ARTIST: &str = "Unknown Artist";
@@ -79,7 +74,6 @@ impl fmt::Display for ImportError {
 
 impl fmt::Debug for ImportError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // write!(f, "{{ file: {}, line: {} }}", file!(), line!())
         match self {
             Self::MissingData => {
                 return write!(f, "Could not gather parts of metadata.");
@@ -91,6 +85,12 @@ impl fmt::Debug for ImportError {
                 return write!(f, "Parsing error");
             }
         }
+    }
+}
+
+impl Default for Library {
+    fn default() -> Self {
+        Library { songs: vec![] }
     }
 }
 
@@ -313,7 +313,6 @@ impl Library {
                 bincode::deserialize_from(&mut buf_reader);
             match result {
                 Ok(song) => {
-                    // println!("{}", song.title);
                     self.songs.push(song);
                 }
                 Err(e) => {

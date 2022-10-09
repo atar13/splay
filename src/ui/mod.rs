@@ -1,12 +1,12 @@
 pub mod helper;
-pub mod input;
 pub mod widgets;
 
 use crate::library::Song;
 use crate::player::symphonia_player::SymphoniaPlayer;
 use crate::player::Player;
 use crate::state::AppState;
-use crate::utils::constants::Requests::{PlayerRequests, UIRequests::*};
+use crate::utils::constants::PlayerStates;
+use crate::utils::constants::Requests::{PlayerRequests, UIRequests::*, AppRequests};
 use crate::{library::Library, utils::constants::Requests::UIRequests};
 use std::sync::{Arc, Mutex};
 use std::{
@@ -36,10 +36,9 @@ use tui::{
 };
 
 pub fn start<'a>(
-    state: Arc<Mutex<AppState>>,
+    app_state: Arc<Mutex<AppState>>,
     rx: Receiver<UIRequests>,
-    songs: Vec<Song>,
-    player_tx: Sender<PlayerRequests>,
+    main_tx: Sender<AppRequests>,
 ) {
     info!("Starting up UI...");
 
@@ -58,8 +57,9 @@ pub fn start<'a>(
 
     debug!("Terminal started successfully");
 
-    let app = App::with_songs(state, songs);
-    app.run(&mut terminal, rx, player_tx);
+    let songs = app_state.lock().unwrap().library.songs.to_owned();
+    let app = App::with_songs(app_state, songs);
+    app.run(&mut terminal, rx, main_tx);
 
     info!("stopping now");
 
@@ -104,19 +104,19 @@ impl App {
         mut self,
         terminal: &mut Terminal<CrosstermBackend<Stdout>>,
         rx: Receiver<UIRequests>,
-        player_tx: Sender<PlayerRequests>,
+        main_tx: Sender<AppRequests>,
     ) -> () {
-        self.song_list.next(); // select first element
+        self.on_down(); //select first element
 
         loop {
-            terminal.draw(|f| self.get_ui(f, &player_tx)).unwrap();
+            terminal.draw(|f| self.get_ui(f, &main_tx)).unwrap();
             match rx.recv() {
                 Ok(request) => match request {
                     Up => self.on_up(),
                     Down => self.on_down(),
                     Enter => self.on_enter(),
-                    ShowSearch => self.state.lock().unwrap().searching = true,
-                    SearchInput(ch) => self.state.lock().unwrap().search_term.push(ch),
+                    ShowSearch => self.state.lock().unwrap().search.searching = true,
+                    SearchInput(ch) => self.state.lock().unwrap().search.term.push(ch),
                     GoBack => self.go_back(),
                     Quit => return,
                     _ => {
@@ -134,11 +134,13 @@ impl App {
     }
 
     fn on_up(&mut self) {
-        self.song_list.previous()
+        self.song_list.previous();
+        self.state.lock().unwrap().ui.selected_song = Some(self.song_list.items.get(self.song_list.state.selected().unwrap()).unwrap().clone());
     }
 
     fn on_down(&mut self) {
         self.song_list.next();
+        self.state.lock().unwrap().ui.selected_song = Some(self.song_list.items.get(self.song_list.state.selected().unwrap()).unwrap().clone());
     }
 
     fn on_enter(&mut self) {
@@ -146,13 +148,13 @@ impl App {
     }
 
     fn go_back(&mut self) {
-        if self.state.lock().unwrap().searching {
-            self.state.lock().unwrap().searching = false;
-            self.state.lock().unwrap().search_term.clear();
+        if self.state.lock().unwrap().search.searching {
+            self.state.lock().unwrap().search.searching = false;
+            self.state.lock().unwrap().search.term.clear();
         }
     }
 
-    fn get_ui<B: Backend>(&mut self, frame: &mut Frame<B>, player_tx: &Sender<PlayerRequests>) {
+    fn get_ui<B: Backend>(&mut self, frame: &mut Frame<B>, main_tx: &Sender<AppRequests>) {
         let size = frame.size();
         let block = Block::default().title("tarvrs").borders(Borders::ALL);
         frame.render_widget(block, size);
@@ -195,30 +197,38 @@ impl App {
         frame.render_stateful_widget(list, chunks[1], &mut self.song_list.state);
         widgets::curr_playing_bar::render(frame, chunks[2], &(self.state.lock().unwrap()));
 
-        if self.tmp_show_popup {
-            let block = Block::default().title("Popup").borders(Borders::ALL);
-            let area = helper::centered_rect(60, 60, size);
-            let selected_song = self
-                .song_list
-                .items
-                .get(self.song_list.state.selected().unwrap());
-            let paragraph = Paragraph::new(format!("{:#?}", selected_song.unwrap()))
-                .style(Style::default().fg(Color::White))
-                .alignment(Alignment::Left);
-            frame.render_widget(Clear, area);
-            frame.render_widget(paragraph, block.inner(area));
-            frame.render_widget(block, area);
-            player_tx.send(PlayerRequests::Start(
-                selected_song.unwrap().path.to_owned(),
-            ));
-            self.state.lock().unwrap().curr_song = Some(selected_song.unwrap().to_owned());
-        } else {
-            player_tx.send(PlayerRequests::Stop);
+        // if self.tmp_show_popup {
+        info!("waiting for lock");
+        match &self.state.lock().unwrap().player.curr_state {
+            PlayerStates::PLAYING => {
+                let block = Block::default().title("Popup").borders(Borders::ALL);
+                let area = helper::centered_rect(60, 60, size);
+                let selected_song = self
+                    .song_list
+                    .items
+                    .get(self.song_list.state.selected().unwrap());
+                let paragraph = Paragraph::new(format!("{:#?}", selected_song.unwrap()))
+                    .style(Style::default().fg(Color::White))
+                    .alignment(Alignment::Left);
+                frame.render_widget(Clear, area);
+                frame.render_widget(paragraph, block.inner(area));
+                frame.render_widget(block, area);
+            }
+            x => info!("{:?}", x) 
         }
+        info!("got lock");
 
-        if self.state.lock().unwrap().searching {
+            // player_tx.send(PlayerRequests::Start(
+            //     selected_song.unwrap().path.to_owned(),
+            // ));
+            // self.state.lock().unwrap().curr_song = Some(selected_song.unwrap().to_owned());
+        // } else {
+            // player_tx.send(PlayerRequests::Stop);
+        // }
+
+        if self.state.lock().unwrap().search.searching {
             // widgets::search_popup::render(frame, self.state.lock().unwrap().search_term.to_owned());
-            let search = Paragraph::new(self.state.lock().unwrap().search_term.to_owned())
+            let search = Paragraph::new(self.state.lock().unwrap().search.term.to_owned())
                 .style(Style::default().fg(Color::White))
                 .alignment(Alignment::Center)
                 .wrap(Wrap { trim: false });

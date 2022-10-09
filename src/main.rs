@@ -1,3 +1,4 @@
+mod input;
 mod library;
 mod metadata;
 mod player;
@@ -6,22 +7,15 @@ mod state;
 mod ui;
 mod utils;
 
-use crate::library::search::SearchDB;
 use crate::library::Library;
 use crate::player::symphonia_player::SymphoniaPlayer;
-use crate::player::Player;
 use crate::state::AppState;
-use crate::ui::input;
 use crate::utils::constants::Requests::*;
-use core::time;
-use std::env;
-use std::process::exit;
 
 #[macro_use]
 extern crate log;
 use simplelog::*;
 use std::fs::File;
-use std::io::BufReader;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
@@ -35,6 +29,8 @@ fn main() {
     info!("Starting tarvrs...");
 
     // let args: Vec<String> = env::args().collect();
+    
+    let state = Arc::new(Mutex::new(AppState::default()));
 
     let player = SymphoniaPlayer::init();
     let mut lib = Library::new();
@@ -46,12 +42,14 @@ fn main() {
         }
         Err(e) => error!("{}", e),
     }
-    // info!("{} songs added", len())
 
     // match lib.read_from_bin() {
     //     Ok(_) => (),
     //     Err(e) => error!("{:?}", e),
     // }
+    
+    state.lock().unwrap().library = lib;
+    
 
     let mut children = vec![];
 
@@ -60,21 +58,24 @@ fn main() {
     let (player_tx, player_rx): (Sender<PlayerRequests>, Receiver<PlayerRequests>) =
         mpsc::channel();
 
-    let app_state = Arc::new(Mutex::new(AppState::new()));
-    let ui_app_state = app_state.clone();
-    let input_app_state = app_state.clone();
-    let player_app_state = app_state.clone();
-
-    // All threads should only take their own receiver and the transmitter to the main thread
-    let ui_to_player_tx = player_tx.clone();
+    // let control Cont 
+    // All threads should only take their own receiver and the transmitter to the control thread
+    let cloned_state = state.clone();
+    let cloned_main_tx = main_tx.clone();
     children.push(thread::spawn(move || {
-        ui::start(ui_app_state, ui_rx, lib.songs, ui_to_player_tx)
+        ui::start(cloned_state, ui_rx, cloned_main_tx)
     }));
+    let cloned_state = state.clone();
+    let cloned_main_tx = main_tx.clone();
     children.push(thread::spawn(move || {
-        ui::input::listen(input_app_state, main_tx)
+        input::listen(cloned_state, cloned_main_tx)
     }));
     // TODO: investigate high cpu on player thread
-    children.push(thread::spawn(move || player.listen(player_rx, player_app_state)));
+    let cloned_state = state.clone();
+    let cloned_main_tx = main_tx.clone();
+    children.push(thread::spawn(move || player.listen(cloned_state, player_rx, cloned_main_tx)));
+
+
 
     loop {
         match main_rx.recv() {
@@ -86,9 +87,11 @@ fn main() {
             }
             Ok(request) => match request {
                 AppRequests::Quit => {
+                    //TODO: this can go in control
                     let _ = ui_tx.send(UIRequests::Quit);
                     let _ = player_tx.send(PlayerRequests::Stop);
                     let _ = player_tx.send(PlayerRequests::Quit);
+                    //
                     let _ = for child in children {
                         let _ = child.join();
                     };

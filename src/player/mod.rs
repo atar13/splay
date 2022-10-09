@@ -1,9 +1,8 @@
 pub mod output;
 pub mod rodio_player;
 pub mod symphonia_player;
-use crate::library::Song;
 use crate::utils::constants::Requests::*;
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::Receiver;
 
 pub trait Player {
     fn init() -> Self;

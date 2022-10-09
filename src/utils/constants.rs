@@ -2,6 +2,11 @@ pub mod Requests {
     use crate::library::Song;
 
     #[derive(Debug, Copy, Clone)]
+    pub enum UIStuff {
+        SelectedSong,
+    }
+
+    #[derive(Debug, Copy, Clone)]
     pub enum UIRequests {
         Up,
         Down,
@@ -13,12 +18,16 @@ pub mod Requests {
         ShowItemInfo,
         ShowSearch,
         SearchInput(char),
+
+        UpdateBar,
+
+        Query(UIStuff),
     }
 
     #[derive(Debug, Clone)]
     pub enum PlayerRequests {
         Stop,
-        Start(String),
+        Start,
         Resume,
         Pause,
         Next,
@@ -34,6 +43,7 @@ pub mod Requests {
         PlayerRequests(PlayerRequests),
         Quit,
     }
+
 }
 
 pub mod Errors {
@@ -46,6 +56,7 @@ pub mod Errors {
     }
 }
 
+#[derive(Debug)]
 pub enum PlayerStates {
     STOPPED,
     PLAYING,
