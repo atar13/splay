@@ -29,7 +29,7 @@ fn main() {
     info!("Starting tarvrs...");
 
     // let args: Vec<String> = env::args().collect();
-    
+
     let state = Arc::new(Mutex::new(AppState::default()));
 
     let player = SymphoniaPlayer::init();
@@ -47,9 +47,8 @@ fn main() {
     //     Ok(_) => (),
     //     Err(e) => error!("{:?}", e),
     // }
-    
+
     state.lock().unwrap().library = lib;
-    
 
     let mut children = vec![];
 
@@ -58,7 +57,7 @@ fn main() {
     let (player_tx, player_rx): (Sender<PlayerRequests>, Receiver<PlayerRequests>) =
         mpsc::channel();
 
-    // let control Cont 
+    // let control Cont
     // All threads should only take their own receiver and the transmitter to the control thread
     let cloned_state = state.clone();
     let cloned_main_tx = main_tx.clone();
@@ -73,9 +72,9 @@ fn main() {
     // TODO: investigate high cpu on player thread
     let cloned_state = state.clone();
     let cloned_main_tx = main_tx.clone();
-    children.push(thread::spawn(move || player.listen(cloned_state, player_rx, cloned_main_tx)));
-
-
+    children.push(thread::spawn(move || {
+        player.listen(cloned_state, player_rx, cloned_main_tx)
+    }));
 
     loop {
         match main_rx.recv() {

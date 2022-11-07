@@ -10,26 +10,28 @@ use crate::utils::constants::PlayerStates;
 use crate::utils::constants::Requests::AppRequests;
 use std::fs::File;
 use std::path::Path;
-use std::sync::{Mutex, Arc, mpsc};
-use std::sync::mpsc::{RecvError, TryRecvError, Sender};
 use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{RecvError, Sender, TryRecvError};
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
 use super::output;
 
-pub struct SymphoniaPlayer {
-}
+pub struct SymphoniaPlayer {}
 
 impl SymphoniaPlayer {
     pub fn init() -> SymphoniaPlayer {
-        SymphoniaPlayer {
-        }
+        SymphoniaPlayer {}
     }
 
-    pub fn listen(mut self, app_state: Arc<Mutex<AppState>>, rx: Receiver<PlayerRequests>, main_tx: Sender<AppRequests>) {
-
-        let mut player_join_handle : Option<JoinHandle<()>> = None;
-
+    pub fn listen(
+        mut self,
+        app_state: Arc<Mutex<AppState>>,
+        rx: Receiver<PlayerRequests>,
+        main_tx: Sender<AppRequests>,
+    ) {
+        let mut player_join_handle: Option<JoinHandle<()>> = None;
 
         // this loop listens for requests
         let _ = loop {
@@ -38,27 +40,30 @@ impl SymphoniaPlayer {
                     PlayerRequests::Stop => {
                         app_state.lock().unwrap().player.curr_state = PlayerStates::STOPPED;
                         player_join_handle.take().map(JoinHandle::join);
-                    },
+                        app_state.lock().unwrap().player.curr_song = None;
+                    }
                     PlayerRequests::Pause => {
                         app_state.lock().unwrap().player.curr_state = PlayerStates::PAUSED;
-                    },
+                    }
                     PlayerRequests::Resume => {
                         app_state.lock().unwrap().player.curr_state = PlayerStates::PLAYING;
-                    },
+                    }
                     PlayerRequests::Start => {
-                        // info!("hi");
                         app_state.lock().unwrap().player.curr_state = PlayerStates::STOPPED;
                         player_join_handle.take().map(JoinHandle::join);
                         app_state.lock().unwrap().player.curr_state = PlayerStates::PLAYING;
-                        //TODO: this blocks curr thread // 
-                        // info!("hi there");
-                        
+
                         //init setup for a song
-                        let x = app_state.lock().unwrap(); 
+                        let x = app_state.lock().unwrap();
                         let song = match &x.ui.selected_song {
-                            Some(song) => song,
+                            Some(song) => song.to_owned(),
                             None => continue,
                         };
+                        drop(x);
+                        app_state.lock().unwrap().player.curr_song = Some(song.to_owned());
+                        app_state.lock().unwrap().player.time_started_curr_song =
+                            Some(Instant::now());
+
                         let song_path = Path::new(&song.path);
 
                         let mut hint = Hint::new();
@@ -115,7 +120,9 @@ impl SymphoniaPlayer {
                             .expect("unsupported codec");
 
                         let cloned_state = app_state.clone();
-                        player_join_handle = Some(std::thread::spawn(move || player(cloned_state, &mut format, track_id, &mut decoder)));
+                        player_join_handle = Some(std::thread::spawn(move || {
+                            player(cloned_state, &mut format, track_id, &mut decoder)
+                        }));
                     }
                     PlayerRequests::Quit => return,
                     _ => (),
@@ -161,12 +168,16 @@ fn player(
     app_state: Arc<Mutex<AppState>>,
     format: &mut Box<dyn FormatReader>,
     track_id: u32,
-    decoder: &mut Box<dyn Decoder>
-    ) {
+    decoder: &mut Box<dyn Decoder>,
+) {
     let mut audio_output = None;
+
     loop {
         match app_state.lock().unwrap().player.curr_state {
             PlayerStates::STOPPED => break,
+            PlayerStates::PAUSED => {
+                continue;
+            }
             _ => (),
         }
         // match player_rx.try_recv() {
@@ -204,8 +215,7 @@ fn player(
             }
         }
 
-        let _ =
-            decode_and_play(&mut audio_output, decoder, packet);
+        let _ = decode_and_play(&mut audio_output, decoder, packet);
     }
 }
 
@@ -234,4 +244,3 @@ fn decode_and_play(
     }
     Ok(())
 }
-

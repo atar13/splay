@@ -6,15 +6,16 @@ use crate::player::symphonia_player::SymphoniaPlayer;
 use crate::player::Player;
 use crate::state::AppState;
 use crate::utils::constants::PlayerStates;
-use crate::utils::constants::Requests::{PlayerRequests, UIRequests::*, AppRequests};
+use crate::utils::constants::Requests::{AppRequests, PlayerRequests, UIRequests::*};
 use crate::{library::Library, utils::constants::Requests::UIRequests};
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
 use std::{
     fmt::format,
     io::{self, Stdout},
     sync::mpsc::{Receiver, Sender},
     time::{Duration, Instant},
 };
+use std::{thread, time};
 use tui::layout::Alignment;
 use tui::widgets::Wrap;
 use widgets::stateful_list::StatefulList;
@@ -79,7 +80,6 @@ pub fn start<'a>(
 pub struct App {
     state: Arc<Mutex<AppState>>,
     song_list: StatefulList<Song>,
-    tmp_show_popup: bool,
 }
 
 impl App {
@@ -87,7 +87,6 @@ impl App {
         App {
             state,
             song_list: StatefulList::with_items(vec![]),
-            tmp_show_popup: false,
         }
     }
 
@@ -95,7 +94,6 @@ impl App {
         App {
             state,
             song_list: StatefulList::with_items(songs),
-            tmp_show_popup: false,
         }
     }
 
@@ -108,9 +106,15 @@ impl App {
     ) -> () {
         self.on_down(); //select first element
 
+        let tick_rate = Duration::from_millis(250);
+        let mut last_tick = Instant::now();
+
         loop {
-            terminal.draw(|f| self.get_ui(f, &main_tx)).unwrap();
-            match rx.recv() {
+            let timeout = tick_rate
+                .checked_sub(last_tick.elapsed())
+                .unwrap_or_else(|| Duration::from_secs(0));
+                terminal.draw(|f| self.get_ui(f, &main_tx)).unwrap();
+            match rx.recv_timeout(timeout) {
                 Ok(request) => match request {
                     Up => self.on_up(),
                     Down => self.on_down(),
@@ -123,29 +127,43 @@ impl App {
                         error!("This UI event is not implemented yet")
                     }
                 },
-                Err(err) => {
-                    error!(
+                Err(err) => match err {
+                     mpsc::RecvTimeoutError::Disconnected => error!(
                         "Could not receive UI event. \n \t Reason: {}",
                         err.to_string()
-                    )
-                }
+                    ),
+                    _ => (),
+                },
+            }
+            if last_tick.elapsed() >= tick_rate {
+                last_tick = Instant::now();
             }
         }
     }
 
     fn on_up(&mut self) {
         self.song_list.previous();
-        self.state.lock().unwrap().ui.selected_song = Some(self.song_list.items.get(self.song_list.state.selected().unwrap()).unwrap().clone());
+        self.state.lock().unwrap().ui.selected_song = Some(
+            self.song_list
+                .items
+                .get(self.song_list.state.selected().unwrap())
+                .unwrap()
+                .clone(),
+        );
     }
 
     fn on_down(&mut self) {
         self.song_list.next();
-        self.state.lock().unwrap().ui.selected_song = Some(self.song_list.items.get(self.song_list.state.selected().unwrap()).unwrap().clone());
+        self.state.lock().unwrap().ui.selected_song = Some(
+            self.song_list
+                .items
+                .get(self.song_list.state.selected().unwrap())
+                .unwrap()
+                .clone(),
+        );
     }
 
-    fn on_enter(&mut self) {
-        self.tmp_show_popup = !self.tmp_show_popup;
-    }
+    fn on_enter(&mut self) {}
 
     fn go_back(&mut self) {
         if self.state.lock().unwrap().search.searching {
@@ -159,28 +177,66 @@ impl App {
         let block = Block::default().title("tarvrs").borders(Borders::ALL);
         frame.render_widget(block, size);
 
-        let chunks = Layout::default()
+        let vert_chunks = Layout::default()
             .direction(Direction::Vertical)
             .margin(1)
-            .constraints(
-                [
-                    Constraint::Percentage(10),
-                    Constraint::Percentage(70),
-                    Constraint::Percentage(20),
-                ]
-                .as_ref(),
-            )
+            .constraints([Constraint::Percentage(20), Constraint::Percentage(80)].as_ref())
             .split(frame.size());
 
-        let block = Block::default().title("Block").borders(Borders::ALL);
-        frame.render_widget(block, chunks[0]);
+        let horiz_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .margin(0)
+            .constraints([Constraint::Percentage(80), Constraint::Percentage(20)].as_ref())
+            .split(vert_chunks[1]);
 
-        let block = Block::default().title("Block 3").borders(Borders::ALL);
-        frame.render_widget(block, chunks[2]);
+        let song_list_vert_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .margin(0)
+            .constraints([Constraint::Percentage(10), Constraint::Percentage(90)].as_ref())
+            .split(horiz_chunks[0]);
 
-        let list: Vec<ListItem> = self
-            .song_list
-            .items
+        // match &self.state.lock().unwrap().player.curr_state {
+        //     PlayerStates::PLAYING => {
+        //         let block = Block::default().title("Popup").borders(Borders::ALL);
+        //         let area = helper::centered_rect(60, 60, size);
+        //         let selected_song = self
+        //             .song_list
+        //             .items
+        //             .get(self.song_list.state.selected().unwrap());
+        //         let paragraph = Paragraph::new(format!("{:#?}", selected_song.unwrap()))
+        //             .style(Style::default().fg(Color::White))
+        //             .alignment(Alignment::Left);
+        //         frame.render_widget(Clear, area);
+        //         frame.render_widget(paragraph, block.inner(area));
+        //         frame.render_widget(block, area);
+        //     }
+        //     x => info!("{:?}", x)
+        // }
+
+
+        let mut filtered_songs : Vec<Song> = Vec::new(); 
+        if self.state.lock().unwrap().search.searching {
+            let search = Paragraph::new(self.state.lock().unwrap().search.term.to_owned())
+                .style(Style::default().fg(Color::White))
+                .alignment(Alignment::Left)
+                .wrap(Wrap { trim: false });
+            frame.render_widget(Clear, song_list_vert_chunks[0]);
+            frame.render_widget(search, song_list_vert_chunks[0]);
+
+            let search_term = &self.state.lock().unwrap().search.term;
+            for song in self.song_list.items.iter() {
+                if song.title.contains(search_term) {
+                    filtered_songs.push(song.clone());
+                }
+            }
+        } else {
+            filtered_songs = self.song_list.items.clone();
+        }
+
+        let filtered_stateful_list = StatefulList::with_items(filtered_songs);
+
+
+        let list: Vec<ListItem> = filtered_stateful_list.items 
             .iter()
             .map(|i| ListItem::new(vec![Spans::from(i.title.clone())]))
             .collect();
@@ -194,47 +250,7 @@ impl App {
             )
             .highlight_symbol(">> ");
 
-        frame.render_stateful_widget(list, chunks[1], &mut self.song_list.state);
-        widgets::curr_playing_bar::render(frame, chunks[2], &(self.state.lock().unwrap()));
-
-        // if self.tmp_show_popup {
-        info!("waiting for lock");
-        match &self.state.lock().unwrap().player.curr_state {
-            PlayerStates::PLAYING => {
-                let block = Block::default().title("Popup").borders(Borders::ALL);
-                let area = helper::centered_rect(60, 60, size);
-                let selected_song = self
-                    .song_list
-                    .items
-                    .get(self.song_list.state.selected().unwrap());
-                let paragraph = Paragraph::new(format!("{:#?}", selected_song.unwrap()))
-                    .style(Style::default().fg(Color::White))
-                    .alignment(Alignment::Left);
-                frame.render_widget(Clear, area);
-                frame.render_widget(paragraph, block.inner(area));
-                frame.render_widget(block, area);
-            }
-            x => info!("{:?}", x) 
-        }
-        info!("got lock");
-
-            // player_tx.send(PlayerRequests::Start(
-            //     selected_song.unwrap().path.to_owned(),
-            // ));
-            // self.state.lock().unwrap().curr_song = Some(selected_song.unwrap().to_owned());
-        // } else {
-            // player_tx.send(PlayerRequests::Stop);
-        // }
-
-        if self.state.lock().unwrap().search.searching {
-            // widgets::search_popup::render(frame, self.state.lock().unwrap().search_term.to_owned());
-            let search = Paragraph::new(self.state.lock().unwrap().search.term.to_owned())
-                .style(Style::default().fg(Color::White))
-                .alignment(Alignment::Center)
-                .wrap(Wrap { trim: false });
-            frame.render_widget(Clear, chunks[0]);
-            frame.render_widget(search, chunks[0])
-        }
-
+        frame.render_stateful_widget(list, song_list_vert_chunks[1], &mut self.song_list.state);
+        widgets::curr_playing_bar::render(frame, vert_chunks[0], &(self.state.lock().unwrap()));
     }
 }

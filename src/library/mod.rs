@@ -1,10 +1,11 @@
-use std::fmt;
-use std::fs;
 use bincode;
-use std::error::Error;
 use lofty::{read_from_path, ItemKey};
 use serde::{Deserialize, Serialize};
+use std::error::Error;
+use std::fmt;
+use std::fs;
 use std::path::Path;
+use std::time::Duration;
 use std::time::Instant;
 pub mod search;
 
@@ -34,7 +35,7 @@ pub struct Song {
     pub album_artist: String,
     pub genre: Option<String>,
     pub year: Option<String>,
-    pub duration: String,
+    pub duration_secs: u64,
     pub play_count: u32,
     pub track_number: Option<String>,
     pub path: String,
@@ -42,9 +43,6 @@ pub struct Song {
 }
 
 pub struct Library {
-    // pub artist_map: HashMap<String, Artist>,
-    // pub album_map: MultiMap<String, Album>,
-    // pub song_map: MultiMap<String, Song>,
     pub songs: Vec<Song>,
 }
 
@@ -96,12 +94,7 @@ impl Default for Library {
 
 impl Library {
     pub fn new() -> Library {
-        Library {
-            // artist_map: HashMap::new(),
-            // album_map: MultiMap::new(),
-            // song_map: MultiMap::new(),
-            songs: Vec::new(),
-        }
+        Library { songs: Vec::new() }
     }
 
     // only support wav, mp3, flac
@@ -113,123 +106,83 @@ impl Library {
         };
 
         match read_from_path(filepath, false) {
-            Ok(file) => {
-                let duration = file.properties().duration();
-                match file.primary_tag() {
-                    Some(tag) => {
-                        let title: &str;
-                        match tag.get_string(&ItemKey::TrackTitle) {
-                            Some(val) => title = val,
-                            _ => return Err(Box::new(ImportError::MissingData)),
-                        };
-                        let track_artist: &str;
-                        match tag.get_string(&ItemKey::TrackArtist) {
-                            Some(val) => track_artist = val,
-                            _ => track_artist = UNKNOWN_ARTIST,
-                        };
-                        let album_title: &str;
-                        match tag.get_string(&ItemKey::AlbumTitle) {
-                            Some(val) => album_title = val,
-                            _ => album_title = UNKNOWN_ALBUM,
-                        };
-                        let album_artist: &str;
-                        match tag.get_string(&ItemKey::AlbumArtist) {
-                            Some(val) => album_artist = val,
-                            _ => album_artist = UNKNOWN_ARTIST,
-                        };
-                        let year: Option<String>;
-                        match tag.get_string(&ItemKey::Year) {
-                            Some(val) => year = Some(val.to_string()),
-                            _ => year = None,
-                        };
-                        let lyrics: Option<String>;
-                        match tag.get_string(&ItemKey::Lyrics) {
-                            Some(val) => lyrics = Some(val.to_string()),
-                            _ => lyrics = None,
-                        };
-                        let track_number: Option<String>;
-                        match tag.get_string(&ItemKey::TrackNumber) {
-                            Some(val) => track_number = Some(val.to_string()),
-                            _ => track_number = None,
-                        };
-                        let genre: Option<String>;
-                        match tag.get_string(&ItemKey::Genre) {
-                            Some(val) => genre = Some(val.to_string()),
-                            _ => genre = None,
-                        };
+            Ok(file) => match file.primary_tag() {
+                Some(tag) => {
+                    let title = match tag.get_string(&ItemKey::TrackTitle) {
+                        Some(val) => val,
+                        None => return Err(Box::new(ImportError::MissingData)),
+                    };
 
-                        match path {
-                            Ok(tmp) => {
-                                let duration_str = format!(
-                                    "{}:{}",
-                                    duration.as_secs() / 60,
-                                    duration.as_secs() % 60
-                                );
-                                let new_song = Song {
-                                    title: title.to_string(),
-                                    album_title: album_title.to_string(),
-                                    track_artist: track_artist.to_string(),
-                                    album_artist: album_artist.to_string(),
-                                    genre,
-                                    year,
-                                    duration: duration_str,
-                                    play_count: 0,
-                                    track_number,
-                                    path: tmp.to_str().unwrap().to_string(),
-                                };
+                    let track_artist = match tag.get_string(&ItemKey::TrackArtist) {
+                        Some(val) => val,
+                        None => UNKNOWN_ARTIST,
+                    };
 
-                                // self.song_map.insert(title.to_string(), new_song);
-                                self.songs.push(new_song);
+                    let album_title = match tag.get_string(&ItemKey::AlbumTitle) {
+                        Some(val) => val,
+                        None => UNKNOWN_ALBUM,
+                    };
 
-                                // match self.album_map.get_vec_mut(album_title) {
-                                //     Some(albums) => {
-                                //         for album in albums {
-                                //             if album.artist_name == album_artist {
-                                //                 album.song_titles.push(title.to_string());
-                                //             }
-                                //         }
-                                //     }
-                                //     None => {
-                                //         let new_album = Album {
-                                //             title: album_title.to_string(),
-                                //             song_titles: vec![title.to_owned()],
-                                //             artist_name: album_artist.to_owned(),
-                                //             play_count: 0,
-                                //         };
-                                //         self.album_map.insert(album_title.to_string(), new_album);
-                                //     }
-                                // }
-                                // match self.artist_map.get_mut(album_artist) {
-                                //     Some(artist) => {
-                                //         artist.album_titles.push(album_title.to_string());
-                                //     }
-                                //     None => {
-                                //         let new_artist = Artist {
-                                //             name: album_artist.to_string(),
-                                //             album_titles: vec![album_title.to_string()],
-                                //             play_count: 0,
-                                //         };
-                                //         self.artist_map
-                                //             .insert(album_artist.to_string(), new_artist);
-                                //     }
-                                // }
-                            }
-                            Err(e) => {
-                                return Err(Box::new(e));
-                            }
+                    let album_artist = match tag.get_string(&ItemKey::AlbumArtist) {
+                        Some(val) => val,
+                        None => UNKNOWN_ARTIST,
+                    };
+
+                    let year = match tag.get_string(&ItemKey::Year) {
+                        Some(val) => Some(val.to_string()),
+                        None => None,
+                    };
+
+                    let _lyrics = match tag.get_string(&ItemKey::Lyrics) {
+                        Some(val) => Some(val.to_string()),
+                        None => None,
+                    };
+
+                    let track_number = match tag.get_string(&ItemKey::TrackNumber) {
+                        Some(val) => Some(val.to_string()),
+                        None => None,
+                    };
+
+                    let genre = match tag.get_string(&ItemKey::Genre) {
+                        Some(val) => Some(val.to_string()),
+                        None => None,
+                    };
+
+                    let total_dur_sec = match tag.get_string(&ItemKey::Length) {
+                        Some(ms_str) => Duration::from_millis(ms_str.parse().unwrap()).as_secs(),
+                        None => 0,
+                    };
+
+                    match path {
+                        Ok(tmp) => {
+                            let new_song = Song {
+                                title: title.to_string(),
+                                album_title: album_title.to_string(),
+                                track_artist: track_artist.to_string(),
+                                album_artist: album_artist.to_string(),
+                                genre,
+                                year,
+                                duration_secs: total_dur_sec,
+                                play_count: 0,
+                                track_number,
+                                path: tmp.to_str().unwrap().to_string(),
+                            };
+
+                            self.songs.push(new_song);
+                        }
+                        Err(e) => {
+                            return Err(Box::new(e));
                         }
                     }
-                    _ => {
-                        return Err(Box::new(ImportError::Parsing));
-                    }
                 }
-            }
+                _ => {
+                    return Err(Box::new(ImportError::Parsing));
+                }
+            },
             Err(_) => {
                 return Err(Box::new(ImportError::Parsing));
             }
         }
-
-        // self.save_to_db()?;
 
         Ok(())
     }
@@ -296,7 +249,7 @@ impl Library {
     pub fn save_to_bin(&self) -> Result<(), Box<dyn Error>> {
         let db_file = fs::File::create("db").unwrap();
         for song in self.songs.iter() {
-            bincode::serialize_into(&db_file, song);
+            _ = bincode::serialize_into(&db_file, song);
         }
         Ok(())
     }

@@ -43,7 +43,6 @@ pub mod Requests {
         PlayerRequests(PlayerRequests),
         Quit,
     }
-
 }
 
 pub mod Errors {

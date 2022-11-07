@@ -1,12 +1,11 @@
 use std::collections::HashMap;
 
-use crossterm::event::{KeyEvent, KeyCode, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::utils::constants::Requests::{AppRequests, UIRequests, PlayerRequests};
-
+use crate::utils::constants::Requests::{AppRequests, PlayerRequests, UIRequests};
 
 pub struct Keybinds {
-    pub lookup: HashMap<KeyEvent, AppRequests>
+    pub lookup: HashMap<KeyEvent, AppRequests>,
 }
 
 impl Default for Keybinds {
@@ -107,6 +106,6 @@ impl Default for Keybinds {
             AppRequests::PlayerRequests(PlayerRequests::Stop),
         );
 
-        return Keybinds{lookup};
+        return Keybinds { lookup };
     }
 }

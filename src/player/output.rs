@@ -19,7 +19,6 @@ pub enum AudioOutputError {
 // redefine Result to have an implied AudioOutputError
 pub type Result<T> = result::Result<T, AudioOutputError>;
 
-
 mod cpal {
     use super::{AudioOutput, AudioOutputError, Result};
 
