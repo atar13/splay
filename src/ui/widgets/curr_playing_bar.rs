@@ -4,7 +4,7 @@ use std::{
 };
 
 use tui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout, Rect, Alignment::Left},
     style::{Color, Modifier, Style},
     text::{Span, Spans},
     widgets::{Block, Borders, Clear, Gauge, Paragraph},
@@ -15,8 +15,13 @@ use crate::{queue::SongQueue, state::AppState, utils::constants::PlayerStates};
 
 pub fn render(frame: &mut Frame<impl tui::backend::Backend>, area: Rect, state: &AppState) {
     let song_title = match &state.player.curr_song {
-        None => Span::raw("N/A"),
+        None => Span::raw(""),
         Some(song) => Span::raw(song.title.to_owned()),
+    };
+
+    let song_artist = match &state.player.curr_song {
+        None => Span::raw(""),
+        Some(song) => Span::raw(song.track_artist.to_owned()),
     };
 
     let curr_time_secs = match &state.player.time_started_curr_song {
@@ -53,19 +58,30 @@ pub fn render(frame: &mut Frame<impl tui::backend::Backend>, area: Rect, state: 
         PlayerStates::PAUSED => Span::raw("Paused"),
     };
 
-    let text = vec![
-        Spans::from(song_title),
-        Spans::from(vec![curr_time_span, Span::raw("/"), total_time_span]),
-        Spans::from(play_status),
-    ];
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Percentage(60), Constraint::Percentage(40)].as_ref())
         .split(area);
 
+
+    let player_info_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(33), Constraint::Percentage(33), Constraint::Percentage(33)].as_ref())
+        .split(chunks[0]);
+
+    let player_status_text = vec![
+        Spans::from(vec![curr_time_span, Span::raw("/"), total_time_span]),
+        Spans::from(play_status),
+    ];
+    let song_status_text = vec![
+        Spans::from(song_title),
+        Spans::from(song_artist),
+    ];
+
     frame.render_widget(Clear, area);
-    frame.render_widget(Paragraph::new(text).alignment(tui::layout::Alignment::Center), chunks[0]);
+    frame.render_widget(Paragraph::new(player_status_text).alignment(Left), player_info_chunks[0]);
+    frame.render_widget(Paragraph::new(song_status_text).alignment(Left), player_info_chunks[1]);
     frame.render_widget(time_gauge, chunks[1]);
 }
 
