@@ -113,7 +113,7 @@ impl App {
             let timeout = tick_rate
                 .checked_sub(last_tick.elapsed())
                 .unwrap_or_else(|| Duration::from_secs(0));
-                terminal.draw(|f| self.get_ui(f, &main_tx)).unwrap();
+            terminal.draw(|f| self.get_ui(f, &main_tx)).unwrap();
             match rx.recv_timeout(timeout) {
                 Ok(request) => match request {
                     Up => self.on_up(),
@@ -128,7 +128,7 @@ impl App {
                     }
                 },
                 Err(err) => match err {
-                     mpsc::RecvTimeoutError::Disconnected => error!(
+                    mpsc::RecvTimeoutError::Disconnected => error!(
                         "Could not receive UI event. \n \t Reason: {}",
                         err.to_string()
                     ),
@@ -213,8 +213,7 @@ impl App {
         //     x => info!("{:?}", x)
         // }
 
-
-        let mut filtered_songs : Vec<Song> = Vec::new(); 
+        let mut filtered_songs: Vec<Song> = Vec::new();
         if self.state.lock().unwrap().search.searching {
             let search = Paragraph::new(self.state.lock().unwrap().search.term.to_owned())
                 .style(Style::default().fg(Color::White))
@@ -235,8 +234,8 @@ impl App {
 
         let filtered_stateful_list = StatefulList::with_items(filtered_songs);
 
-
-        let list: Vec<ListItem> = filtered_stateful_list.items 
+        let list: Vec<ListItem> = filtered_stateful_list
+            .items
             .iter()
             .map(|i| ListItem::new(vec![Spans::from(i.title.clone())]))
             .collect();

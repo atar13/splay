@@ -61,8 +61,6 @@ impl SymphoniaPlayer {
                         };
                         drop(x);
                         app_state.lock().unwrap().player.curr_song = Some(song.to_owned());
-                        app_state.lock().unwrap().player.time_started_curr_song =
-                            Some(Instant::now());
 
                         let song_path = Path::new(&song.path);
 
@@ -171,32 +169,18 @@ fn player(
     decoder: &mut Box<dyn Decoder>,
 ) {
     let mut audio_output = None;
+    app_state.lock().unwrap().player.time = Duration::ZERO;
 
     loop {
+        // TODO: have a counter for current song playback time
         match app_state.lock().unwrap().player.curr_state {
-            PlayerStates::STOPPED => break,
+            PlayerStates::STOPPED => break, 
             PlayerStates::PAUSED => {
                 continue;
             }
             _ => (),
         }
-        // match player_rx.try_recv() {
-        //     Ok(request) => match request {
-        //             PlayerRequests::Stop => break,
-        //             PlayerRequests::Pause => continue,
-        //             PlayerRequests::Resume => {}
-        //         _ => (),
-        //     },
-        //     Err(err) => match err {
-        //         TryRecvError::Empty => (),
-        //         TryRecvError::Disconnected => {
-        //             error!(
-        //             "Could not receive request to player app state. Reason: {}",
-        //             err.to_string()
-        //         );
-        //         }
-        //     },
-        // }
+        let start_packet_time = Instant::now();
 
         let packet = match format.next_packet() {
             Ok(packet) => packet,
@@ -216,6 +200,10 @@ fn player(
         }
 
         let _ = decode_and_play(&mut audio_output, decoder, packet);
+
+        let mut guard = app_state.lock().unwrap();
+        guard.player.time = guard.player.time + start_packet_time.elapsed(); // update player time
+        drop(guard);
     }
 }
 

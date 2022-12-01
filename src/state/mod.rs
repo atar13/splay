@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::time::{Instant, Duration};
 
 use crate::{
     library::{self, Library, Song},
@@ -43,7 +43,7 @@ impl Default for UIState {
 
 pub struct PlayerState {
     pub curr_state: PlayerStates,
-    pub time_started_curr_song: Option<Instant>,
+    pub time: Duration,
     pub curr_song: Option<Song>,
 }
 
@@ -51,7 +51,7 @@ impl Default for PlayerState {
     fn default() -> Self {
         Self {
             curr_state: PlayerStates::STOPPED,
-            time_started_curr_song: None,
+            time: Duration::ZERO,
             curr_song: None,
         }
     }
