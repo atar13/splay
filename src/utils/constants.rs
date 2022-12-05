@@ -1,10 +1,4 @@
-pub mod Requests {
-    use crate::library::Song;
-
-    #[derive(Debug, Copy, Clone)]
-    pub enum UIStuff {
-        SelectedSong,
-    }
+pub mod requests {
 
     #[derive(Debug, Copy, Clone)]
     pub enum UIRequests {

@@ -1,7 +1,7 @@
-use std::time::{Instant, Duration};
+use std::time::Duration;
 
 use crate::{
-    library::{self, Library, Song},
+    library::{Library, song::Song},
     utils::constants::PlayerStates,
 };
 

@@ -1,6 +1,5 @@
 mod input;
 mod library;
-mod metadata;
 mod player;
 mod queue;
 mod state;
@@ -10,7 +9,7 @@ mod utils;
 use crate::library::Library;
 use crate::player::symphonia_player::SymphoniaPlayer;
 use crate::state::AppState;
-use crate::utils::constants::Requests::*;
+use crate::utils::constants::requests::*;
 
 #[macro_use]
 extern crate log;
@@ -38,41 +37,35 @@ fn main() {
     match lib.import_dir("/home/atarbinian/Desktop/media") {
         // TODO: allow to use ~
         Ok(_) => {
-            lib.save_to_bin();
+            let _ = lib.save_to_file("db".to_string());
         }
         Err(e) => error!("{}", e),
     }
 
-    // match lib.read_from_bin() {
-    //     Ok(_) => (),
-    //     Err(e) => error!("{:?}", e),
-    // }
-
     state.lock().unwrap().library = lib;
 
-    let mut children = vec![];
+    let mut join_handlers = vec![];
 
     let (main_tx, main_rx): (Sender<AppRequests>, Receiver<AppRequests>) = mpsc::channel();
     let (ui_tx, ui_rx): (Sender<UIRequests>, Receiver<UIRequests>) = mpsc::channel();
     let (player_tx, player_rx): (Sender<PlayerRequests>, Receiver<PlayerRequests>) =
         mpsc::channel();
 
-    // let control Cont
-    // All threads should only take their own receiver and the transmitter to the control thread
     let cloned_state = state.clone();
     let cloned_main_tx = main_tx.clone();
-    children.push(thread::spawn(move || {
+    join_handlers.push(thread::spawn(move || {
         ui::start(cloned_state, ui_rx, cloned_main_tx)
     }));
+
     let cloned_state = state.clone();
     let cloned_main_tx = main_tx.clone();
-    children.push(thread::spawn(move || {
+    join_handlers.push(thread::spawn(move || {
         input::listen(cloned_state, cloned_main_tx)
     }));
-    // TODO: investigate high cpu on player thread
+
     let cloned_state = state.clone();
     let cloned_main_tx = main_tx.clone();
-    children.push(thread::spawn(move || {
+    join_handlers.push(thread::spawn(move || {
         player.listen(cloned_state, player_rx, cloned_main_tx)
     }));
 
@@ -86,14 +79,12 @@ fn main() {
             }
             Ok(request) => match request {
                 AppRequests::Quit => {
-                    //TODO: this can go in control
                     let _ = ui_tx.send(UIRequests::Quit);
                     let _ = player_tx.send(PlayerRequests::Stop);
                     let _ = player_tx.send(PlayerRequests::Quit);
-                    //
-                    let _ = for child in children {
-                        let _ = child.join();
-                    };
+                    for handler in join_handlers {
+                        let _ = handler.join();
+                    }
                     info!("Gracefully shutting down");
                     std::process::exit(0);
                 }
@@ -103,7 +94,6 @@ fn main() {
                 AppRequests::PlayerRequests(request) => {
                     let _ = player_tx.send(request);
                 }
-                _ => (),
             },
         }
     }

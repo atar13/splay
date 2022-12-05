@@ -1,13 +1,13 @@
 pub mod helper;
 pub mod widgets;
 
-use crate::library::Song;
+use crate::library::song::Song;
 use crate::player::symphonia_player::SymphoniaPlayer;
 use crate::player::Player;
 use crate::state::AppState;
+use crate::utils::constants::requests::{AppRequests, PlayerRequests, UIRequests::*};
 use crate::utils::constants::PlayerStates;
-use crate::utils::constants::Requests::{AppRequests, PlayerRequests, UIRequests::*};
-use crate::{library::Library, utils::constants::Requests::UIRequests};
+use crate::{library::Library, utils::constants::requests::UIRequests};
 use std::sync::{mpsc, Arc, Mutex};
 use std::{
     fmt::format,

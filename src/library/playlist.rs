@@ -1,4 +1,4 @@
-use crate::library::Song;
+use crate::library::song::Song;
 
 struct Playlist {
     songs: Vec<Song>,

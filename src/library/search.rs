@@ -8,14 +8,14 @@ struct node {
 }
 
 pub struct SearchDB {
-    pathToDB: String,
+    path_to_db: String,
     words: Vec<String>,
 }
 
 impl SearchDB {
     pub fn new() -> SearchDB {
         SearchDB {
-            pathToDB: String::new(),
+            path_to_db: String::new(),
             words: Vec::new(),
         }
     }
