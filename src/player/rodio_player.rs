@@ -1,149 +1,155 @@
-// use crate::library::Library;
-// use crate::library::Song;
-// use crate::player::{Player, PlayerRequests};
-// use crate::queue::SongQueue;
-// use rodio::{source::Source, Decoder, OutputStream, OutputStreamHandle, Sink};
-// use std::fs::File;
-// use std::io::BufReader;
-// use std::sync::mpsc;
-// use std::sync::mpsc::{Receiver, Sender};
-// use std::thread;
+use crate::player::{Player, PlayerRequests};
+use crate::state::AppState;
+use crate::utils::constants::PlayerStates;
+use rodio::{Decoder, OutputStream, Sink};
+use std::fs::File;
+use std::io::BufReader;
+use std::sync::mpsc::Receiver;
+use std::sync::{Arc, Mutex};
+use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
-// pub struct RodioPlayer {
-//     curr_song: Option<Song>,
-//     curr_sink: Option<Sink>,
-//     queue: SongQueue,
-//     curr_volume: f32,
-//     curr_state: PlayerStates,
-//     curr_buf: Option<BufReader<File>>,
-// }
+pub struct RodioPlayer {
+}
 
-// enum PlayerStates {
-//     STOPPED,
-//     STARTED,
-//     PAUSED,
-// }
+impl RodioPlayer {
+    pub fn new() -> RodioPlayer {
+        RodioPlayer { }
+    }
+}
 
-// impl Player for RodioPlayer {
-//     fn init() -> RodioPlayer {
-//         let (sink, _) = Sink::new_idle();
-//         return RodioPlayer {
-//             curr_song: None,
-//             queue: SongQueue::new(),
-//             curr_volume: 0.,
-//             curr_state: PlayerStates::STOPPED,
-//             curr_sink: Some(sink),
-//             curr_buf: None,
-//         };
-//     }
-//     fn start(self, song: Song) {
-//         unimplemented!();
-//     }
-//     fn resume() {
-//         unimplemented!();
-//     }
-//     fn stop() {
-//         unimplemented!();
-//     }
-//     fn next() {
-//         unimplemented!();
-//     }
-//     fn prev() {
-//         unimplemented!();
-//     }
-//     fn seek(seconds: u64) {
-//         unimplemented!();
-//     }
-//     fn set_volume(level: f32) {
-//         unimplemented!();
-//     }
+impl Player for RodioPlayer {
+    // create a player thread with a loop that receives requests for player functions
+    fn listen(&mut self, app_state: Arc<Mutex<AppState>>, rx: Receiver<PlayerRequests>) {
+        let mut join_handle: Option<JoinHandle<()>> = None;
 
-//     // create a player thread with a loop that receives requuests for player functions
-//     fn listen(mut self, rx: Receiver<PlayerRequests>) {
-//         let _player_process = thread::spawn(move || loop {
-//             let (_stream, stream_handle) = OutputStream::try_default().unwrap();
-//             let sink = Sink::try_new(&stream_handle).unwrap();
-//             self.curr_sink = Some(sink);
-//             info!("Started player thread...");
-//             loop {
-//                 match rx.recv() {
-//                     Ok(request) => {
-//                         match request {
-//                             PlayerRequests::START(song) => {
-//                                 self.curr_song = Some(song.clone());
-//                                 info!("Playing {}", song.title);
-//                                 let file = BufReader::new(File::open(song.path).unwrap());
-//                                 let source = Decoder::new(file).unwrap();
-//                                 match &self.curr_sink {
-//                                     Some(sink) => sink.append(source),
-//                                     None => error!("No sink found"),
-//                                 }
-//                             }
-//                             PlayerRequests::RESUME => match &self.curr_sink {
-//                                 Some(sink) => sink.play(),
-//                                 None => error!("No sink found"),
-//                             },
-//                             PlayerRequests::PAUSE => {
-//                                 info!("Request to pause");
-//                                 match &self.curr_sink {
-//                                     Some(sink) => sink.pause(),
-//                                     None => error!("No sink found"),
-//                                 }
-//                             }
-//                             PlayerRequests::STOP => match &self.curr_sink {
-//                                 Some(sink) => {
-//                                     sink.stop();
-//                                     self.curr_sink = None;
-//                                 }
-//                                 None => error!("No sink found"),
-//                             },
-//                             PlayerRequests::SEEK(seconds) => {
-//                                 let sink: &Sink;
-//                                 match &self.curr_sink {
-//                                     Some(s) => {
-//                                         sink = s;
-//                                     }
-//                                     None => {
-//                                         let (_stream, stream_handle) =
-//                                             OutputStream::try_default().unwrap();
-//                                         let s = Sink::try_new(&stream_handle).unwrap();
-//                                         // self.curr_sink = Some(s);
-//                                     }
-//                                 }
-//                                 match &self.curr_song {
-//                                     Some(song) => {
-//                                         let file = BufReader::new(
-//                                             File::open(song.path.to_owned()).unwrap(),
-//                                         );
-//                                         let source = Decoder::new(file).unwrap();
-//                                         // .skip_duration(std::time::Duration::from_secs(seconds));
-//                                         // sink.append(source);
-//                                         info!("seeking");
-//                                         // info!("{}", sink.empty());
-//                                         // sink.play();
-//                                         // sink.sleep_until_end();
-//                                     }
-//                                     None => {
-//                                         error!("No song found")
-//                                     }
-//                                 }
-//                             }
-//                             PlayerRequests::CHANGE_VOLUME(vol_diff) => match &self.curr_sink {
-//                                 Some(sink) => {
-//                                     self.curr_volume = sink.volume();
-//                                     sink.set_volume(self.curr_volume + vol_diff);
-//                                     self.curr_volume = sink.volume();
-//                                 }
-//                                 None => error!("No sink found"),
-//                             },
-//                             _ => {}
-//                         }
-//                     }
-//                     Err(e) => {
-//                         error!("{:?}", e);
-//                     }
-//                 }
-//             }
-//         });
-//     }
-// }
+        loop {
+            match rx.recv() {
+                Ok(request) => {
+                    match request {
+                        PlayerRequests::Quit => return,
+                        PlayerRequests::Resume => {
+                            app_state.lock().unwrap().player.curr_state = PlayerStates::PLAYING
+                        }
+                        PlayerRequests::Pause => {
+                            app_state.lock().unwrap().player.curr_state = PlayerStates::PAUSED
+                        }
+                        PlayerRequests::Stop => {
+                            app_state.lock().unwrap().player.curr_state = PlayerStates::STOPPED;
+                            join_handle.take().map(JoinHandle::join);
+                            app_state.lock().unwrap().player.curr_song = None;
+                        }
+                        PlayerRequests::Start => {
+                            // stop player if previously playing
+                            app_state.lock().unwrap().player.curr_state = PlayerStates::STOPPED;
+                            join_handle.take().map(JoinHandle::join);
+                            app_state.lock().unwrap().player.curr_state = PlayerStates::PLAYING;
+
+                            // fetch which song is selected in the UI
+                            // TODO: maybe just have other threads modify player.curr_song instead
+                            let song = match app_state.lock().unwrap().ui.selected_song.to_owned() {
+                                Some(song) => song,
+                                None => continue,
+                            };
+
+                            app_state.lock().unwrap().player.curr_song = Some(song.to_owned());
+
+                            let cloned_state = app_state.clone();
+                            join_handle =
+                                Some(thread::spawn(move || player(song.path, cloned_state)));
+                        }
+                        PlayerRequests::PlayPause => {
+                            match app_state.lock().unwrap().player.curr_state {
+                                PlayerStates::PLAYING => {
+                                    app_state.lock().unwrap().player.curr_state =
+                                        PlayerStates::PAUSED
+                                }
+                                PlayerStates::PAUSED => {
+                                    app_state.lock().unwrap().player.curr_state =
+                                        PlayerStates::PLAYING
+                                }
+                                _ => (),
+                            }
+                        }
+                        // PlayerRequests::SEEK(seconds) => {
+                        //     let sink: &Sink;
+                        //     match &self.curr_sink {
+                        //         Some(s) => {
+                        //             sink = s;
+                        //         }
+                        //         None => {
+                        //             let (_stream, stream_handle) =
+                        //                 OutputStream::try_default().unwrap();
+                        //             let s = Sink::try_new(&stream_handle).unwrap();
+                        //             // self.curr_sink = Some(s);
+                        //         }
+                        //     }
+                        //     match &self.curr_song {
+                        //         Some(song) => {
+                        //             let file = BufReader::new(
+                        //                 File::open(song.path.to_owned()).unwrap(),
+                        //             );
+                        //             let source = Decoder::new(file).unwrap();
+                        //             // .skip_duration(std::time::Duration::from_secs(seconds));
+                        //             // sink.append(source);
+                        //             info!("seeking");
+                        //             // info!("{}", sink.empty());
+                        //             // sink.play();
+                        //             // sink.sleep_until_end();
+                        //         }
+                        //         None => {
+                        //             error!("No song found")
+                        //         }
+                        //     }
+                        // }
+                        // PlayerRequests::CHANGE_VOLUME(vol_diff) => match &self.curr_sink {
+                        //     Some(sink) => {
+                        //         self.curr_volume = sink.volume();
+                        //         sink.set_volume(self.curr_volume + vol_diff);
+                        //         self.curr_volume = sink.volume();
+                        //     }
+                        //     None => error!("No sink found"),
+                        // },
+                        _ => (),
+                    }
+                }
+                Err(e) => {
+                    error!("{:?}", e);
+                }
+            }
+        }
+    }
+}
+
+fn player(path: String, app_state: Arc<Mutex<AppState>>) {
+    let tick_rate = 250;
+    let (_stream, stream_handle) = OutputStream::try_default().unwrap();
+    let sink = Sink::try_new(&stream_handle).unwrap();
+    let file = BufReader::new(File::open(path).unwrap());
+    sink.append(Decoder::new(BufReader::new(file)).unwrap());
+    app_state.lock().unwrap().player.progress = Duration::ZERO;
+    loop {
+        match app_state.lock().unwrap().player.curr_state {
+            PlayerStates::STOPPED => {
+                sink.stop();
+                break;
+            }
+            PlayerStates::PAUSED => {
+                sink.pause();
+                continue;
+            }
+            PlayerStates::PLAYING => {
+                sink.play();
+            }
+        }
+        if sink.empty() {
+            break;
+        }
+        thread::sleep(Duration::from_millis(tick_rate));
+        let mut guard = app_state.lock().unwrap(); //idk I just did this not to call lock() a bunch
+                                                   //of times
+                                                   // update player time with how long the last packet took to play
+        guard.player.progress = guard.player.progress + Duration::from_millis(tick_rate);
+        drop(guard);
+    }
+}

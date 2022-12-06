@@ -7,39 +7,36 @@ use symphonia::core::probe::Hint;
 use crate::player::PlayerRequests;
 use crate::state::AppState;
 use crate::utils::constants::PlayerStates;
-use crate::utils::constants::Requests::AppRequests;
 use std::fs::File;
 use std::path::Path;
 use std::sync::mpsc::Receiver;
-use std::sync::mpsc::{RecvError, Sender, TryRecvError};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::mpsc::RecvError;
+use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use super::output;
+use super::{output, Player};
 
 pub struct SymphoniaPlayer {}
 
 impl SymphoniaPlayer {
-    pub fn init() -> SymphoniaPlayer {
+    pub fn new() -> SymphoniaPlayer {
         SymphoniaPlayer {}
     }
+}
 
-    pub fn listen(
-        mut self,
-        app_state: Arc<Mutex<AppState>>,
-        rx: Receiver<PlayerRequests>,
-        main_tx: Sender<AppRequests>,
-    ) {
-        let mut player_join_handle: Option<JoinHandle<()>> = None;
+impl Player for SymphoniaPlayer {
+    // listen for actions the player should take
+    fn listen(&mut self, app_state: Arc<Mutex<AppState>>, rx: Receiver<PlayerRequests>) {
+        let mut join_handle: Option<JoinHandle<()>> = None;
 
-        // this loop listens for requests
-        let _ = loop {
+        let _result = loop {
             match rx.recv() {
                 Ok(request) => match request {
+                    PlayerRequests::Quit => return,
                     PlayerRequests::Stop => {
                         app_state.lock().unwrap().player.curr_state = PlayerStates::STOPPED;
-                        player_join_handle.take().map(JoinHandle::join);
+                        join_handle.take().map(JoinHandle::join);
                         app_state.lock().unwrap().player.curr_song = None;
                     }
                     PlayerRequests::Pause => {
@@ -48,24 +45,36 @@ impl SymphoniaPlayer {
                     PlayerRequests::Resume => {
                         app_state.lock().unwrap().player.curr_state = PlayerStates::PLAYING;
                     }
+                    PlayerRequests::PlayPause => {
+                        match app_state.lock().unwrap().player.curr_state {
+                            PlayerStates::PLAYING => {
+                                app_state.lock().unwrap().player.curr_state = PlayerStates::PAUSED
+                            }
+                            PlayerStates::PAUSED => {
+                                app_state.lock().unwrap().player.curr_state = PlayerStates::PLAYING
+                            }
+                            _ => (),
+                        }
+                    }
                     PlayerRequests::Start => {
+                        // stop player if previously playing
                         app_state.lock().unwrap().player.curr_state = PlayerStates::STOPPED;
-                        player_join_handle.take().map(JoinHandle::join);
+                        join_handle.take().map(JoinHandle::join);
                         app_state.lock().unwrap().player.curr_state = PlayerStates::PLAYING;
 
-                        //init setup for a song
-                        let x = app_state.lock().unwrap();
-                        let song = match &x.ui.selected_song {
-                            Some(song) => song.to_owned(),
+                        // init setup for playing a song
+
+                        // fetch which song is selected in the UI
+                        // TODO: maybe just have other threads modify player.curr_song instead
+                        let song = match app_state.lock().unwrap().ui.selected_song.to_owned() {
+                            Some(song) => song,
                             None => continue,
                         };
-                        drop(x);
+
                         app_state.lock().unwrap().player.curr_song = Some(song.to_owned());
 
                         let song_path = Path::new(&song.path);
-
                         let mut hint = Hint::new();
-
                         if let Some(extension) = song_path.extension() {
                             if let Some(extension_str) = extension.to_str() {
                                 hint.with_extension(extension_str);
@@ -76,6 +85,7 @@ impl SymphoniaPlayer {
                             Ok(f) => Box::new(f),
                             Err(err) => {
                                 panic!("Could not open song at path {}. Reason: {}", song.path, err)
+                                //TODO: return Result instead of panic here
                             }
                         };
 
@@ -83,7 +93,7 @@ impl SymphoniaPlayer {
                             MediaSourceStream::new(source, Default::default());
 
                         let format_opts = FormatOptions {
-                            enable_gapless: true,
+                            enable_gapless: true, // TODO: have this be a config option
                             ..Default::default()
                         };
 
@@ -118,15 +128,14 @@ impl SymphoniaPlayer {
                             .expect("unsupported codec");
 
                         let cloned_state = app_state.clone();
-                        player_join_handle = Some(std::thread::spawn(move || {
+
+                        // spin up another thread that will start playing audio
+                        join_handle = Some(std::thread::spawn(move || {
                             player(cloned_state, &mut format, track_id, &mut decoder)
                         }));
                     }
-                    PlayerRequests::Quit => return,
-                    _ => (),
                 },
                 Err(err) => match err {
-                    // TryRecvError::Empty => (),
                     RecvError => {
                         error!(
                             "Could not receive request to player app state. Reason: {}",
@@ -137,29 +146,6 @@ impl SymphoniaPlayer {
             }
         };
     }
-
-    // TODO: change song to 'str path
-    fn resume(&mut self) {
-        // match self.curr_state {
-        //     PlayerStates::PAUSED => self.curr_state = PlayerStates::PLAYING,
-        //     _ => (),
-        // }
-    }
-    fn stop(&mut self) {
-        // self.curr_state = PlayerStates::STOPPED;
-    }
-    fn next(self) {
-        unimplemented!()
-    }
-    fn prev(self) {
-        unimplemented!()
-    }
-    fn seek(seconds: u64) {
-        unimplemented!()
-    }
-    fn set_volume(level: f32) {
-        unimplemented!()
-    }
 }
 
 fn player(
@@ -169,18 +155,16 @@ fn player(
     decoder: &mut Box<dyn Decoder>,
 ) {
     let mut audio_output = None;
-    app_state.lock().unwrap().player.time = Duration::ZERO;
+    app_state.lock().unwrap().player.progress = Duration::ZERO;
 
     loop {
-        // TODO: have a counter for current song playback time
         match app_state.lock().unwrap().player.curr_state {
-            PlayerStates::STOPPED => break, 
+            PlayerStates::STOPPED => break,
             PlayerStates::PAUSED => {
                 continue;
             }
             _ => (),
         }
-        let start_packet_time = Instant::now();
 
         let packet = match format.next_packet() {
             Ok(packet) => packet,
@@ -199,15 +183,17 @@ fn player(
             }
         }
 
-        let _ = decode_and_play(&mut audio_output, decoder, packet);
-
-        let mut guard = app_state.lock().unwrap();
-        guard.player.time = guard.player.time + start_packet_time.elapsed(); // update player time
+        let start_packet_time = Instant::now(); // record the time before a packet is played
+        let _ = play_packet(&mut audio_output, decoder, packet);
+        let mut guard = app_state.lock().unwrap(); //idk I just did this not to call lock() a bunch
+                                                   //of times
+                                                   // update player time with how long the last packet took to play
+        guard.player.progress = guard.player.progress + start_packet_time.elapsed();
         drop(guard);
     }
 }
 
-fn decode_and_play(
+fn play_packet(
     audio_output: &mut Option<Box<dyn output::AudioOutput>>,
     decoder: &mut Box<dyn Decoder>,
     packet: symphonia::core::formats::Packet,
