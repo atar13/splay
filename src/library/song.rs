@@ -46,6 +46,7 @@ impl Song {
         s.year = tag::get_year(tag);
         s.track_number = tag::get_track_number(tag);
         s.genre = tag::get_genre(tag);
+        s.duration_secs = tag::get_total_dur_sec(tag);
         Ok(s)
     }
 }
