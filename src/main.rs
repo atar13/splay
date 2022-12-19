@@ -7,7 +7,9 @@ mod ui;
 mod utils;
 
 use crate::library::Library;
+use crate::player::rodio_player::RodioPlayer;
 use crate::player::symphonia_player::SymphoniaPlayer;
+use crate::player::Player;
 use crate::state::AppState;
 use crate::utils::constants::requests::*;
 
@@ -18,29 +20,59 @@ use std::fs::File;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
+use std::io::Read;
+use serde::Deserialize;
+
+use toml::Table;
+
+#[derive(Deserialize)]
+struct SplayConfig {
+    media: Media
+}
+
+#[derive(Deserialize)]
+struct Media {
+    directories: Vec<String>
+}
+
 
 fn main() {
     let _ = WriteLogger::init(
         LevelFilter::Info,
         Config::default(),
-        File::create("tarvrs.log").unwrap(),
+        File::create("splay.log").unwrap(),
     );
-    info!("Starting tarvrs...");
+    info!("Starting splay...");
 
     // let args: Vec<String> = env::args().collect();
 
     let state = Arc::new(Mutex::new(AppState::default()));
 
-    let player = SymphoniaPlayer::init();
+    // let mut player = SymphoniaPlayer::new();
+    let mut player = RodioPlayer::new();
     let mut lib = Library::new();
 
-    match lib.import_dir("/home/atarbinian/Desktop/media") {
-        // TODO: allow to use ~
-        Ok(_) => {
-            let _ = lib.save_to_file("db".to_string());
+
+    // TODO: change to other path on system in XDG_CONFIG_HOME 
+    match File::open("config.toml") {
+        Ok(mut in_file) => {
+            let mut in_contents = String::new();
+            in_file.read_to_string(&mut in_contents).unwrap();
+            let config: SplayConfig = toml::from_str(in_contents.as_str()).unwrap();
+            
+            for dir in config.media.directories {
+                // TODO: allow to use ~
+                match lib.import_dir(dir.as_str()) {
+                    Ok(_) => {
+                        let _ = lib.save_to_file("db".to_string());
+                    }
+                    Err(e) => error!("{}", e),
+                }
+            }
         }
-        Err(e) => error!("{}", e),
+        Err(_) => (),
     }
+
 
     state.lock().unwrap().library = lib;
 
@@ -64,9 +96,9 @@ fn main() {
     }));
 
     let cloned_state = state.clone();
-    let cloned_main_tx = main_tx.clone();
+    // let cloned_main_tx = main_tx.clone();
     join_handlers.push(thread::spawn(move || {
-        player.listen(cloned_state, player_rx, cloned_main_tx)
+        player.listen(cloned_state, player_rx)
     }));
 
     loop {

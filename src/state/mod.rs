@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::{
-    library::{Library, song::Song},
+    library::{song::Song, Library},
     utils::constants::PlayerStates,
 };
 
@@ -43,7 +43,7 @@ impl Default for UIState {
 
 pub struct PlayerState {
     pub curr_state: PlayerStates,
-    pub time: Duration,
+    pub progress: Duration,
     pub curr_song: Option<Song>,
 }
 
@@ -51,7 +51,7 @@ impl Default for PlayerState {
     fn default() -> Self {
         Self {
             curr_state: PlayerStates::STOPPED,
-            time: Duration::ZERO,
+            progress: Duration::ZERO,
             curr_song: None,
         }
     }

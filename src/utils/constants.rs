@@ -6,16 +6,16 @@ pub mod requests {
         Down,
         Quit,
         Enter,
-
+        //
         GoBack,
-
-        ShowItemInfo,
+        //
+        // ShowItemInfo,
         ShowSearch,
         SearchInput(char),
-
-        UpdateBar,
-
-        Query(UIStuff),
+        //
+        // UpdateBar,
+        //
+        // Query(UIStuff),
     }
 
     #[derive(Debug, Clone)]
@@ -24,10 +24,11 @@ pub mod requests {
         Start,
         Resume,
         Pause,
-        Next,
-        Previous,
-        Seek(u64),
-        ChangeVolume(f32),
+        PlayPause,
+        // Next,
+        // Previous,
+        // Seek(u64),
+        // ChangeVolume(f32),
         Quit,
     }
 
@@ -39,16 +40,16 @@ pub mod requests {
     }
 }
 
-pub mod Errors {
-    use thiserror::Error;
-
-    #[derive(Debug, Error)]
-    pub enum AudioDeviceError {
-        #[error("No audio device found")]
-        AudioDeviceNotFound,
-    }
-}
-
+// pub mod errors {
+//     use thiserror::Error;
+//
+//     #[derive(Debug, Error)]
+//     pub enum AudioDeviceError {
+//         #[error("No audio device found")]
+//         AudioDeviceNotFound,
+//     }
+// }
+//
 #[derive(Debug)]
 pub enum PlayerStates {
     STOPPED,

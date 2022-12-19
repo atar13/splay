@@ -2,6 +2,7 @@ pub mod helper;
 pub mod widgets;
 
 use crate::library::song::Song;
+use crate::library::tag;
 use crate::player::symphonia_player::SymphoniaPlayer;
 use crate::player::Player;
 use crate::state::AppState;
@@ -58,7 +59,8 @@ pub fn start<'a>(
 
     debug!("Terminal started successfully");
 
-    let songs = app_state.lock().unwrap().library.songs.to_owned();
+    let mut songs = app_state.lock().unwrap().library.songs.to_owned();
+    songs.sort_by(|a, b| a.title.cmp(&b.title));
     let app = App::with_songs(app_state, songs);
     app.run(&mut terminal, rx, main_tx);
 
@@ -104,7 +106,9 @@ impl App {
         rx: Receiver<UIRequests>,
         main_tx: Sender<AppRequests>,
     ) -> () {
-        self.on_down(); //select first element
+        if self.song_list.len() != 0 {
+            self.on_down(); //select first element
+        }
 
         let tick_rate = Duration::from_millis(250);
         let mut last_tick = Instant::now();
@@ -142,25 +146,33 @@ impl App {
     }
 
     fn on_up(&mut self) {
+        match self.song_list.state.selected() {
+            Some(idx) => if idx == 0 {return} else { () },
+            None => return,
+        }
         self.song_list.previous();
-        self.state.lock().unwrap().ui.selected_song = Some(
-            self.song_list
-                .items
-                .get(self.song_list.state.selected().unwrap())
-                .unwrap()
-                .clone(),
-        );
+        match self.song_list.items.get(self.song_list.state.selected().unwrap()) {
+            Some(song) => {
+                self.state.lock().unwrap().ui.selected_song = Some(song.clone());
+            },
+            None => ()
+        }
     }
 
     fn on_down(&mut self) {
+        let length = self.song_list.len();
+        match self.song_list.state.selected() {
+            Some(idx) => if idx == length {return} else { () },
+            None => (),
+        }
+        // panic!("yo");
         self.song_list.next();
-        self.state.lock().unwrap().ui.selected_song = Some(
-            self.song_list
-                .items
-                .get(self.song_list.state.selected().unwrap())
-                .unwrap()
-                .clone(),
-        );
+        match self.song_list.items.get(self.song_list.state.selected().unwrap()) {
+            Some(song) => {
+                self.state.lock().unwrap().ui.selected_song = Some(song.clone());
+            },
+            None => ()
+        }
     }
 
     fn on_enter(&mut self) {}
@@ -174,7 +186,7 @@ impl App {
 
     fn get_ui<B: Backend>(&mut self, frame: &mut Frame<B>, main_tx: &Sender<AppRequests>) {
         let size = frame.size();
-        let block = Block::default().title("tarvrs").borders(Borders::ALL);
+        let block = Block::default().title("splay").borders(Borders::ALL);
         frame.render_widget(block, size);
 
         let vert_chunks = Layout::default()
@@ -222,9 +234,9 @@ impl App {
             frame.render_widget(Clear, song_list_vert_chunks[0]);
             frame.render_widget(search, song_list_vert_chunks[0]);
 
-            let search_term = &self.state.lock().unwrap().search.term;
+            let search_term = &self.state.lock().unwrap().search.term.to_lowercase();
             for song in self.song_list.items.iter() {
-                if song.title.contains(search_term) {
+                if song.title.to_lowercase().contains(search_term) {
                     filtered_songs.push(song.clone());
                 }
             }
@@ -237,7 +249,11 @@ impl App {
         let list: Vec<ListItem> = filtered_stateful_list
             .items
             .iter()
-            .map(|i| ListItem::new(vec![Spans::from(i.title.clone())]))
+            .map(|i| {
+                let mut album = i.album_title.clone();
+                album.truncate(16);
+                ListItem::new(vec![Spans::from(format!("{: <16} {}", album, i.title.clone()))])
+            })
             .collect();
 
         let list = List::new(list)

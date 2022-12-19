@@ -2,10 +2,17 @@ use std::collections::HashMap;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::utils::constants::Requests::{AppRequests, PlayerRequests, UIRequests};
+use crate::utils::constants::requests::{AppRequests, PlayerRequests, UIRequests};
 
 pub struct Keybinds {
     pub lookup: HashMap<KeyEvent, AppRequests>,
+}
+
+impl Keybinds {
+    pub fn from_config(path: String) -> Self {
+        Keybinds::default()
+        //TODO: need to verify that a key isn't bound to two actions
+    }
 }
 
 impl Default for Keybinds {

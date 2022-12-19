@@ -24,7 +24,7 @@ pub fn render(frame: &mut Frame<impl tui::backend::Backend>, area: Rect, state: 
         Some(song) => Span::raw(song.track_artist.to_owned()),
     };
 
-    let curr_time_secs = state.player.time.as_secs();
+    let curr_time_secs = state.player.progress.as_secs();
 
     let total_time_secs = match &state.player.curr_song {
         None => 0,

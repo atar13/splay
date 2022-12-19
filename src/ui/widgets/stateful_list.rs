@@ -44,4 +44,8 @@ impl<T> StatefulList<T> {
     pub fn unselect(&mut self) {
         self.state.select(None);
     }
+
+    pub fn len(&self) -> usize {
+        self.items.len()
+    }
 }

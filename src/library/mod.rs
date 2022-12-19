@@ -3,10 +3,10 @@ pub mod search;
 pub mod song;
 pub mod tag;
 
+use crate::library::song::Song;
 use bincode;
 use errors::ImportError;
 use lofty::read_from_path;
-use crate::library::song::Song;
 use std::error::Error;
 use std::fs;
 use std::path::Path;
@@ -110,10 +110,10 @@ impl Library {
             Err(err) => return Err(Box::new(err)), //TODO: replace this with library DB error type
         };
         for song in self.songs.iter() {
-             match bincode::serialize_into(&db_file, song) {
+            match bincode::serialize_into(&db_file, song) {
                 Err(err) => return Err(Box::new(err)), //TODO: replace this with library DB error type
                 _ => (),
-             }
+            }
         }
         Ok(())
     }
